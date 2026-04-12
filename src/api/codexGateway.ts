@@ -69,6 +69,10 @@ export type WorkspaceRootsState = {
   active: string[]
 }
 
+export type RuntimeInfo = {
+  codexCliVersion: string
+}
+
 export type ComposerFileSuggestion = {
   path: string
 }
@@ -1182,6 +1186,26 @@ export async function getHomeDirectory(): Promise<string> {
       ? (record.data as Record<string, unknown>)
       : {}
   return typeof data.path === 'string' ? data.path.trim() : ''
+}
+
+export async function getRuntimeInfo(): Promise<RuntimeInfo> {
+  const response = await fetch('/codex-api/runtime-info')
+  const payload = (await response.json()) as unknown
+  if (!response.ok) {
+    throw new Error('Failed to load runtime info')
+  }
+  const record =
+    payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {}
+  const data =
+    record.data && typeof record.data === 'object' && !Array.isArray(record.data)
+      ? (record.data as Record<string, unknown>)
+      : {}
+
+  return {
+    codexCliVersion: typeof data.codexCliVersion === 'string' ? data.codexCliVersion.trim() || 'unknown' : 'unknown',
+  }
 }
 
 export async function setWorkspaceRootsState(nextState: WorkspaceRootsState): Promise<void> {

@@ -163,7 +163,7 @@
             <IconTablerSettings class="sidebar-settings-icon" />
             <span>Settings</span>
             <span class="sidebar-settings-button-version">
-              nervmor {{ worktreeName }} · v{{ appVersion }}
+              nervmor {{ worktreeName }} · v{{ appVersion }} (cli {{ codexCliVersion }})
             </span>
           </button>
         </div>
@@ -319,6 +319,7 @@ import {
   getAccounts,
   getHomeDirectory,
   getProjectRootSuggestion,
+  getRuntimeInfo,
   getWorkspaceRootsState,
   openProjectRoot,
   removeAccount,
@@ -407,6 +408,7 @@ const serverMatchedThreadIds = ref<string[] | null>(null)
 let threadSearchTimer: ReturnType<typeof setTimeout> | null = null
 const defaultNewProjectName = ref('New Project (1)')
 const homeDirectory = ref('')
+const codexCliVersion = ref('unknown')
 const isSettingsOpen = ref(false)
 const isReviewPaneOpen = ref(false)
 const accounts = ref<UiAccountEntry[]>([])
@@ -520,6 +522,7 @@ onMounted(() => {
   void initialize()
   void applyLaunchProjectPathFromUrl()
   void loadHomeDirectory()
+  void loadRuntimeInfo()
   void loadWorkspaceRootOptionsState()
   void refreshDefaultProjectName()
 })
@@ -1104,6 +1107,15 @@ async function loadHomeDirectory(): Promise<void> {
     homeDirectory.value = await getHomeDirectory()
   } catch {
     homeDirectory.value = ''
+  }
+}
+
+async function loadRuntimeInfo(): Promise<void> {
+  try {
+    const runtimeInfo = await getRuntimeInfo()
+    codexCliVersion.value = runtimeInfo.codexCliVersion || 'unknown'
+  } catch {
+    codexCliVersion.value = 'unknown'
   }
 }
 

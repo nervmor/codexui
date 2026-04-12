@@ -10,6 +10,7 @@ import { basename, isAbsolute, join, resolve } from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { handleAccountRoutes } from './accountRoutes.js'
 import { handleReviewRoutes } from './reviewGit.js'
+import { readCodexCliVersion } from './runtimeInfo.js'
 import { handleSkillsRoutes, initializeSkillsSyncOnStartup } from './skillsRoutes.js'
 
 type JsonRpcCall = {
@@ -1550,6 +1551,15 @@ export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
 
       if (req.method === 'GET' && url.pathname === '/codex-api/home-directory') {
         setJson(res, 200, { data: { path: homedir() } })
+        return
+      }
+
+      if (req.method === 'GET' && url.pathname === '/codex-api/runtime-info') {
+        setJson(res, 200, {
+          data: {
+            codexCliVersion: readCodexCliVersion(),
+          },
+        })
         return
       }
 
