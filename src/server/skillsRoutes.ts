@@ -142,6 +142,8 @@ type SkillHubEntry = {
   url: string
   installed: boolean
   path?: string
+  scope?: string
+  projectName?: string
   enabled?: boolean
 }
 
@@ -276,7 +278,13 @@ function buildHubEntry(e: SkillsTreeEntry): SkillHubEntry {
   }
 }
 
-type InstalledSkillInfo = { name: string; path: string; enabled: boolean }
+type InstalledSkillInfo = {
+  name: string
+  path: string
+  enabled: boolean
+  scope?: string
+  projectName?: string
+}
 type SyncedSkill = { owner?: string; name: string; enabled: boolean }
 
 type SkillsSyncState = {
@@ -336,11 +344,54 @@ async function scanInstalledSkillsFromDisk(): Promise<Map<string, InstalledSkill
       const skillMd = join(skillsDir, entry.name, 'SKILL.md')
       try {
         await stat(skillMd)
-        map.set(entry.name, { name: entry.name, path: skillMd, enabled: true })
+        map.set(entry.name, { name: entry.name, path: skillMd, enabled: true, scope: 'user' })
       } catch {}
     }
   } catch {}
   return map
+}
+
+function getProjectNameFromCwd(cwd: string): string {
+  const parts = cwd.split(/[\\/]/).filter(Boolean)
+  return parts.at(-1) ?? cwd
+}
+
+async function listInstalledSkills(appServer: AppServerLike): Promise<InstalledSkillInfo[]> {
+  const installed: InstalledSkillInfo[] = []
+  const seen = new Set<string>()
+
+  try {
+    const result = (await appServer.rpc('skills/list', {})) as {
+      data?: Array<{
+        cwd?: string
+        skills?: Array<{
+          name?: string
+          path?: string
+          enabled?: boolean
+          scope?: string
+        }>
+      }>
+    }
+
+    for (const entry of result.data ?? []) {
+      const projectName = entry.cwd ? getProjectNameFromCwd(entry.cwd) : ''
+      for (const skill of entry.skills ?? []) {
+        if (!skill.name) continue
+        const dedupeKey = skill.path || `${skill.scope ?? ''}:${entry.cwd ?? ''}:${skill.name}`
+        if (seen.has(dedupeKey)) continue
+        seen.add(dedupeKey)
+        installed.push({
+          name: skill.name,
+          path: skill.path ?? '',
+          enabled: skill.enabled !== false,
+          scope: skill.scope ?? 'user',
+          projectName: skill.scope === 'repo' && projectName ? projectName : undefined,
+        })
+      }
+    }
+  } catch {}
+
+  return installed
 }
 
 function getSkillsSyncStatePath(): string {
@@ -890,7 +941,7 @@ async function searchSkillsHub(
   query: string,
   limit: number,
   sort: string,
-  installedMap: Map<string, InstalledSkillInfo>,
+  installedByName: Map<string, InstalledSkillInfo>,
 ): Promise<SkillHubEntry[]> {
   const q = query.toLowerCase().trim()
   const filtered = q
@@ -914,8 +965,10 @@ async function searchSkillsHub(
     })
   }
   return results.slice(0, limit).map((s) => {
-    const local = installedMap.get(s.name)
-    return local ? { ...s, installed: true, path: local.path, enabled: local.enabled } : s
+    const local = installedByName.get(s.name)
+    return local
+      ? { ...s, installed: true, path: local.path, scope: local.scope, projectName: local.projectName, enabled: local.enabled }
+      : s
   })
 }
 
@@ -933,32 +986,43 @@ export async function handleSkillsRoutes(
       const sort = url.searchParams.get('sort') || 'date'
       const allEntries = await fetchSkillsTree()
 
-      const installedMap = await scanInstalledSkillsFromDisk()
-      try {
-        const result = (await appServer.rpc('skills/list', {})) as { data?: Array<{ skills?: Array<{ name?: string; path?: string; enabled?: boolean }> }> }
-        for (const entry of result.data ?? []) {
-          for (const skill of entry.skills ?? []) {
-            if (skill.name) {
-              installedMap.set(skill.name, { name: skill.name, path: skill.path ?? '', enabled: skill.enabled !== false })
-            }
-          }
-        }
-      } catch {}
-
-      const installedHubEntries = allEntries.filter((e) => installedMap.has(e.name))
-      await fetchMetaBatch(installedHubEntries)
-
-      const installed: SkillHubEntry[] = []
-      for (const [, info] of installedMap) {
-        const hubEntry = allEntries.find((e) => e.name === info.name)
-        const base = hubEntry ? buildHubEntry(hubEntry) : {
-          name: info.name, owner: 'local', description: '', displayName: '', publishedAt: 0, avatarUrl: '', url: '', installed: false,
-        }
-        installed.push({ ...base, installed: true, path: info.path, enabled: info.enabled })
+      const installedFromAppServer = await listInstalledSkills(appServer)
+      const diskInstalledMap = await scanInstalledSkillsFromDisk()
+      const installed = installedFromAppServer.length > 0
+        ? [...installedFromAppServer]
+        : [...diskInstalledMap.values()]
+      const installedByName = new Map<string, InstalledSkillInfo>()
+      for (const info of installed) {
+        if (!installedByName.has(info.name)) installedByName.set(info.name, info)
       }
 
-      const results = await searchSkillsHub(allEntries, q, limit, sort, installedMap)
-      setJson(res, 200, { data: results, installed, total: allEntries.length })
+      const installedHubEntries = allEntries.filter((e) => installedByName.has(e.name))
+      await fetchMetaBatch(installedHubEntries)
+
+      const installedEntries: SkillHubEntry[] = installed.map((info) => {
+        const hubEntry = allEntries.find((e) => e.name === info.name)
+        const base = hubEntry ? buildHubEntry(hubEntry) : {
+          name: info.name,
+          owner: 'local',
+          description: '',
+          displayName: '',
+          publishedAt: 0,
+          avatarUrl: '',
+          url: '',
+          installed: false,
+        }
+        return {
+          ...base,
+          installed: true,
+          path: info.path,
+          scope: info.scope,
+          projectName: info.projectName,
+          enabled: info.enabled,
+        }
+      })
+
+      const results = await searchSkillsHub(allEntries, q, limit, sort, installedByName)
+      setJson(res, 200, { data: results, installed: installedEntries, total: allEntries.length })
     } catch (error) {
       setJson(res, 502, { error: getErrorMessage(error, 'Failed to fetch skills hub') })
     }

@@ -218,6 +218,12 @@ If a finding conflicts with current official docs or current official code, trea
   - Run build/typecheck.
   - Run Playwright in headless mode and capture a screenshot showing sidebar order.
 
+## Findings: Skills Scope Metadata (2026-04-17)
+
+- The app-server `skills/list` response carries per-skill `scope` plus the parent entry `cwd`.
+- Current schema values are `user`, `repo`, `system`, and `admin`.
+- For UI labeling in this workspace, `repo` scope can be mapped to a project badge by deriving the project name from the entry `cwd`, while non-`repo` scopes should stay unlabeled to avoid noisy global badges.
+
 ## Findings: Plugin Runtime Surface (2026-04-17)
 
 - On `codex-cli 0.121.0`, `meta/methods` exposes stable plugin-related RPCs through the app bridge:

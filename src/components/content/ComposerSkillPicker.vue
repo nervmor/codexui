@@ -22,7 +22,10 @@
           @click="$emit('select', skill)"
           @pointerenter="highlightIndex = idx"
         >
-          <span class="skill-picker-name">{{ skill.name }}</span>
+          <div class="skill-picker-name-row">
+            <span class="skill-picker-name">{{ skill.name }}</span>
+            <span v-if="projectBadgeLabel(skill)" class="skill-picker-project-badge">{{ projectBadgeLabel(skill) }}</span>
+          </div>
           <span v-if="skill.description" class="skill-picker-desc">{{ skill.description }}</span>
         </button>
       </li>
@@ -38,6 +41,8 @@ export type SkillOption = {
   name: string
   description: string
   path: string
+  scope?: string
+  projectName?: string
 }
 
 const props = defineProps<{
@@ -61,7 +66,9 @@ const filtered = computed(() => {
   const q = query.value.toLowerCase().trim()
   if (!q) return props.skills
   return props.skills.filter(
-    (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q),
+    (s) => s.name.toLowerCase().includes(q)
+      || s.description.toLowerCase().includes(q)
+      || (s.projectName ?? '').toLowerCase().includes(q),
   )
 })
 
@@ -94,6 +101,10 @@ watch(() => props.visible, (v) => {
 watch(query, () => {
   highlightIndex.value = 0
 })
+
+function projectBadgeLabel(skill: SkillOption): string {
+  return skill.scope === 'repo' && skill.projectName ? `Project · ${skill.projectName}` : ''
+}
 </script>
 
 <style scoped>
@@ -125,6 +136,14 @@ watch(query, () => {
 
 .skill-picker-name {
   @apply text-sm font-medium text-zinc-800;
+}
+
+.skill-picker-name-row {
+  @apply flex flex-wrap items-center gap-1.5;
+}
+
+.skill-picker-project-badge {
+  @apply rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 leading-none;
 }
 
 .skill-picker-desc {

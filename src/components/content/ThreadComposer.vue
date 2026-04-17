@@ -403,7 +403,13 @@ import ComposerDropdown from './ComposerDropdown.vue'
 import ComposerSearchDropdown from './ComposerSearchDropdown.vue'
 import ComposerSkillPicker from './ComposerSkillPicker.vue'
 
-type SkillItem = { name: string; description: string; path: string }
+type SkillItem = {
+  name: string
+  description: string
+  path: string
+  scope?: string
+  projectName?: string
+}
 type MentionItem = { name: string; description: string; path: string; token?: string }
 
 const props = defineProps<{
@@ -539,7 +545,9 @@ const skillDropdownOptions = computed(() =>
   (props.skills ?? []).map((s) => ({
     value: s.path,
     label: s.name,
-    description: s.description,
+    description: s.scope === 'repo' && s.projectName
+      ? ['Project · ' + s.projectName, s.description].filter(Boolean).join(' · ')
+      : s.description,
   })),
 )
 const pluginOptions = computed<MentionItem[]>(() => props.plugins ?? [])

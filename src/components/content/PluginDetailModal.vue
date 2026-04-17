@@ -34,8 +34,18 @@
           <div v-if="detailLoading" class="plugin-detail-loading">Loading plugin details…</div>
           <div v-else-if="detail" class="plugin-detail-sections">
             <section v-if="detail.skills.length > 0" class="plugin-detail-section">
-              <h4 class="plugin-detail-section-title">Bundled Skills</h4>
-              <div class="plugin-detail-list">
+              <button
+                class="plugin-detail-section-toggle"
+                type="button"
+                @click="isBundledSkillsOpen = !isBundledSkillsOpen"
+              >
+                <span class="plugin-detail-section-title">Bundled Skills ({{ detail.skills.length }})</span>
+                <IconTablerChevronRight
+                  class="plugin-detail-section-chevron"
+                  :class="{ 'is-open': isBundledSkillsOpen }"
+                />
+              </button>
+              <div v-if="isBundledSkillsOpen" class="plugin-detail-list">
                 <article v-for="skill in detail.skills" :key="skill.path || skill.name" class="plugin-detail-list-item">
                   <div>
                     <strong>{{ skill.displayName }}</strong>
@@ -132,7 +142,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import IconTablerChevronRight from '../icons/IconTablerChevronRight.vue'
 import type { UiPluginApp, UiPluginDetail, UiPluginSummary } from '../../api/codexGateway'
 
 const props = defineProps<{
@@ -154,12 +165,17 @@ defineEmits<{
 
 const busy = computed(() => props.isInstalling === true || props.isUninstalling === true)
 const avatarText = computed(() => props.plugin.displayName.slice(0, 1).toUpperCase())
+const isBundledSkillsOpen = ref(false)
 const avatarStyle = computed(() => {
   if (!props.plugin.brandColor) return undefined
   return { backgroundColor: props.plugin.brandColor }
 })
 const summaryText = computed(() => props.detail?.description || props.plugin.longDescription || props.plugin.shortDescription)
 const postInstallApps = computed(() => props.postInstallApps ?? [])
+
+watch(() => [props.visible, props.plugin.id], ([visible]) => {
+  if (visible) isBundledSkillsOpen.value = false
+})
 </script>
 
 <style scoped>
@@ -235,6 +251,18 @@ const postInstallApps = computed(() => props.postInstallApps ?? [])
 
 .plugin-detail-section-title {
   @apply m-0 text-sm font-semibold text-zinc-900;
+}
+
+.plugin-detail-section-toggle {
+  @apply flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-left transition hover:border-zinc-300 hover:bg-white;
+}
+
+.plugin-detail-section-chevron {
+  @apply h-4 w-4 shrink-0 text-zinc-500 transition-transform;
+}
+
+.plugin-detail-section-chevron.is-open {
+  @apply rotate-90;
 }
 
 .plugin-detail-list {

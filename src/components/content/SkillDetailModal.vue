@@ -16,7 +16,10 @@
                 <h3 class="sdm-title">{{ skill.displayName || skill.name }}</h3>
                 <span v-if="skill.installed && !effectiveEnabled" class="sdm-badge-disabled">Disabled</span>
               </div>
-              <span class="sdm-owner">{{ skill.owner }}</span>
+              <div class="sdm-meta-row">
+                <span class="sdm-owner">{{ skill.owner }}</span>
+                <span v-if="projectBadgeLabel" class="sdm-project-badge">{{ projectBadgeLabel }}</span>
+              </div>
             </div>
           </div>
           <button class="sdm-close" type="button" aria-label="Close" @click="$emit('close')">
@@ -85,6 +88,8 @@ export type HubSkill = {
   installed: boolean
   path?: string
   enabled?: boolean
+  scope?: string
+  projectName?: string
 }
 
 const props = defineProps<{
@@ -107,6 +112,11 @@ const isLoadingReadme = ref(false)
 
 const effectiveEnabled = computed(() => localEnabled.value ?? props.skill.enabled ?? true)
 const isActing = computed(() => (props.isInstalling === true) || (props.isUninstalling === true))
+const projectBadgeLabel = computed(() => (
+  props.skill.scope === 'repo' && props.skill.projectName
+    ? `Project · ${props.skill.projectName}`
+    : ''
+))
 
 const renderedReadme = computed(() => {
   const raw = readmeContent.value
@@ -213,6 +223,14 @@ function onToggleEnabled(): void {
 
 .sdm-owner {
   @apply text-xs text-zinc-400;
+}
+
+.sdm-meta-row {
+  @apply flex flex-wrap items-center gap-1.5;
+}
+
+.sdm-project-badge {
+  @apply rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 leading-none;
 }
 
 .sdm-close {

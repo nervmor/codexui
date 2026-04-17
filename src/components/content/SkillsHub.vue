@@ -1,8 +1,8 @@
 <template>
   <div class="skills-hub">
     <div class="skills-hub-header">
-      <h2 class="skills-hub-title">Skills Hub</h2>
-      <p class="skills-hub-subtitle">Browse and discover skills from the OpenClaw community</p>
+      <h2 class="skills-hub-title">Skills</h2>
+      <p class="skills-hub-subtitle">Manage installed skills across global and project scopes, and discover more from the OpenClaw community.</p>
     </div>
 
     <div class="skills-sync-panel">
@@ -49,7 +49,7 @@
       <div v-if="isInstalledOpen" class="skills-hub-grid">
         <SkillCard
           v-for="skill in filteredInstalled"
-          :key="skill.name"
+          :key="skill.path || `${skill.owner}/${skill.name}`"
           :skill="skill"
           @select="(skill) => openDetail(skill as HubSkill)"
         />

@@ -371,7 +371,7 @@ const automations = ref<UiAutomation[]>([])
 const runs = ref<UiAutomationRun[]>([])
 const defaults = ref<UiAutomationDefaults>({ model: '', reasoningEffort: '', sandboxMode: '' })
 const models = ref<string[]>([])
-const skills = ref<Array<{ name: string; description: string; path: string }>>([])
+const skills = ref<Array<{ name: string; description: string; path: string; scope?: string; projectName?: string }>>([])
 const projects = ref<Array<{ path: string; label: string }>>([])
 const selectedRunId = ref('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -437,7 +437,9 @@ const skillDropdownOptions = computed(() =>
   skills.value.map((skill) => ({
     value: skill.name,
     label: skill.name,
-    description: skill.description,
+    description: skill.scope === 'repo' && skill.projectName
+      ? [`Project · ${skill.projectName}`, skill.description].filter(Boolean).join(' · ')
+      : skill.description,
   })),
 )
 

@@ -21,7 +21,10 @@
           <span v-if="skill.installed && skill.enabled === false" class="skill-card-badge-disabled">Disabled</span>
           <span v-else-if="skill.installed" class="skill-card-badge">Installed</span>
         </div>
-        <span class="skill-card-owner">{{ skill.owner }}</span>
+        <div class="skill-card-meta-row">
+          <span class="skill-card-owner">{{ skill.owner }}</span>
+          <span v-if="projectBadgeLabel" class="skill-card-project-badge">{{ projectBadgeLabel }}</span>
+        </div>
       </div>
     </div>
     <p v-if="skill.description" class="skill-card-desc">{{ skill.description }}</p>
@@ -43,6 +46,8 @@ const props = defineProps<{
     url: string
     installed: boolean
     enabled?: boolean
+    scope?: string
+    projectName?: string
   }
 }>()
 
@@ -59,6 +64,12 @@ const publishedLabel = computed(() => {
   if (diff < 2592000_000) return `${Math.floor(diff / 86400_000)}d ago`
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 })
+
+const projectBadgeLabel = computed(() => (
+  props.skill.scope === 'repo' && props.skill.projectName
+    ? `Project · ${props.skill.projectName}`
+    : ''
+))
 
 function onAvatarError(e: Event): void {
   const img = e.target as HTMLImageElement
@@ -111,6 +122,14 @@ function onAvatarError(e: Event): void {
 
 .skill-card-owner {
   @apply text-xs text-zinc-400;
+}
+
+.skill-card-meta-row {
+  @apply flex flex-wrap items-center gap-1.5;
+}
+
+.skill-card-project-badge {
+  @apply rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 leading-none;
 }
 
 .skill-card-desc {

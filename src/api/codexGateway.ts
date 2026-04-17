@@ -1770,6 +1770,7 @@ export type SkillInfo = {
   description: string
   path: string
   scope: string
+  projectName?: string
   enabled: boolean
 }
 
@@ -1910,6 +1911,11 @@ type SkillsListResponseEntry = {
   errors: unknown[]
 }
 
+function getProjectNameFromCwd(cwd: string): string {
+  const parts = cwd.split(/[\\/]/).filter(Boolean)
+  return parts.at(-1) ?? cwd
+}
+
 export async function getSkillsList(cwds?: string[]): Promise<SkillInfo[]> {
   try {
     const params: Record<string, unknown> = {}
@@ -1918,6 +1924,7 @@ export async function getSkillsList(cwds?: string[]): Promise<SkillInfo[]> {
     const skills: SkillInfo[] = []
     const seen = new Set<string>()
     for (const entry of payload.data) {
+      const projectName = entry.cwd ? getProjectNameFromCwd(entry.cwd) : ''
       for (const skill of entry.skills) {
         if (!skill.name || seen.has(skill.path)) continue
         seen.add(skill.path)
@@ -1926,6 +1933,7 @@ export async function getSkillsList(cwds?: string[]): Promise<SkillInfo[]> {
           description: skill.shortDescription || skill.description || '',
           path: skill.path,
           scope: skill.scope,
+          projectName: skill.scope === 'repo' && projectName ? projectName : undefined,
           enabled: skill.enabled,
         })
       }
