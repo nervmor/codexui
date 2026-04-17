@@ -218,6 +218,30 @@ If a finding conflicts with current official docs or current official code, trea
   - Run build/typecheck.
   - Run Playwright in headless mode and capture a screenshot showing sidebar order.
 
+## Findings: Plugin Runtime Surface (2026-04-17)
+
+- On `codex-cli 0.121.0`, `meta/methods` exposes stable plugin-related RPCs through the app bridge:
+  - `plugin/list`
+  - `plugin/read`
+  - `plugin/install`
+  - `plugin/uninstall`
+  - `app/list`
+  - `mcpServerStatus/list`
+  - `mcpServer/oauth/login`
+  - `config/mcpServer/reload`
+- `experimentalFeature/list` reports both `apps` and `plugins` as `stage: "stable"` and enabled by default in this runtime.
+- `plugin/read` is the best detail source for desktop-parity plugin UI:
+  - plugin marketplace name/path
+  - manifest/interface display metadata
+  - bundled skills with effective enabled state
+  - related apps with `needsAuth`
+  - MCP server names
+- `plugin/install` has side effects on the user Codex environment and returns connector follow-up data:
+  - response shape includes `authPolicy`
+  - response shape includes `appsNeedingAuth[]`
+  - use a real install only from an explicit user action, not from capability probing
+- `app/list/updated` notifications arrive after connector data refreshes, so plugin/app settings pages should subscribe and update in-place rather than requiring a full page reload.
+
 ## Findings: Context Usage Meter (2026-04-01)
 
 - Official `openai/codex` app-server protocol exposes per-thread context telemetry via `thread/tokenUsage/updated` with:

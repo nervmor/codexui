@@ -18,6 +18,11 @@ const router = createRouter({
       component: EmptyRouteView,
     },
     {
+      path: '/plugins',
+      name: 'plugins',
+      component: EmptyRouteView,
+    },
+    {
       path: '/skills',
       name: 'skills',
       component: EmptyRouteView,

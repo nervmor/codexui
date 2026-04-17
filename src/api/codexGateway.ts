@@ -125,6 +125,16 @@ function readBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null
 }
 
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const next: string[] = []
+  for (const item of value) {
+    const normalized = readString(item)
+    if (normalized) next.push(normalized)
+  }
+  return next
+}
+
 function normalizeAccountUnavailableReason(value: unknown): UiAccountUnavailableReason | null {
   return value === 'payment_required' ? value : null
 }
@@ -1456,6 +1466,95 @@ export type SkillInfo = {
   enabled: boolean
 }
 
+export type UiPluginSummary = {
+  id: string
+  name: string
+  marketplaceName: string
+  marketplacePath: string
+  installed: boolean
+  enabled: boolean
+  installPolicy: string
+  authPolicy: string
+  displayName: string
+  shortDescription: string
+  longDescription: string
+  developerName: string
+  category: string
+  capabilities: string[]
+  websiteUrl: string
+  privacyPolicyUrl: string
+  termsOfServiceUrl: string
+  brandColor: string
+  defaultPrompt: string[]
+}
+
+export type UiPluginMarketplace = {
+  name: string
+  displayName: string
+  path: string
+  plugins: UiPluginSummary[]
+}
+
+export type UiPluginDetailSkill = {
+  name: string
+  displayName: string
+  description: string
+  shortDescription: string
+  path: string
+  enabled: boolean
+}
+
+export type UiPluginApp = {
+  id: string
+  name: string
+  description: string
+  installUrl: string
+  needsAuth: boolean
+}
+
+export type UiPluginDetail = {
+  marketplaceName: string
+  marketplacePath: string
+  summary: UiPluginSummary
+  description: string
+  skills: UiPluginDetailSkill[]
+  apps: UiPluginApp[]
+  mcpServers: string[]
+}
+
+export type UiPluginInstallResult = {
+  authPolicy: string
+  appsNeedingAuth: UiPluginApp[]
+}
+
+export type UiAppInfo = {
+  id: string
+  name: string
+  description: string
+  installUrl: string
+  logoUrl: string
+  logoUrlDark: string
+  distributionChannel: string
+  isAccessible: boolean
+  isEnabled: boolean
+  categories: string[]
+  labels: Record<string, string>
+  pluginDisplayNames: string[]
+}
+
+export type UiMcpToolInfo = {
+  name: string
+  description: string
+}
+
+export type UiMcpServerStatus = {
+  name: string
+  authStatus: string
+  tools: UiMcpToolInfo[]
+  resourceCount: number
+  resourceTemplateCount: number
+}
+
 type SkillsListResponseEntry = {
   cwd: string
   skills: Array<{
@@ -1492,6 +1591,258 @@ export async function getSkillsList(cwds?: string[]): Promise<SkillInfo[]> {
     return skills
   } catch {
     return []
+  }
+}
+
+function normalizePluginSummary(
+  marketplaceName: string,
+  marketplacePath: string,
+  value: unknown,
+): UiPluginSummary | null {
+  const record = asRecord(value)
+  if (!record) return null
+
+  const id = readString(record.id)
+  const name = readString(record.name)
+  if (!id || !name) return null
+
+  const pluginInterface = asRecord(record.interface)
+
+  return {
+    id,
+    name,
+    marketplaceName,
+    marketplacePath,
+    installed: readBoolean(record.installed) ?? false,
+    enabled: readBoolean(record.enabled) ?? false,
+    installPolicy: readString(record.installPolicy) ?? '',
+    authPolicy: readString(record.authPolicy) ?? '',
+    displayName: readString(pluginInterface?.displayName) ?? name,
+    shortDescription: readString(pluginInterface?.shortDescription) ?? '',
+    longDescription: readString(pluginInterface?.longDescription) ?? '',
+    developerName: readString(pluginInterface?.developerName) ?? '',
+    category: readString(pluginInterface?.category) ?? '',
+    capabilities: readStringArray(pluginInterface?.capabilities),
+    websiteUrl: readString(pluginInterface?.websiteUrl) ?? '',
+    privacyPolicyUrl: readString(pluginInterface?.privacyPolicyUrl) ?? '',
+    termsOfServiceUrl: readString(pluginInterface?.termsOfServiceUrl) ?? '',
+    brandColor: readString(pluginInterface?.brandColor) ?? '',
+    defaultPrompt: readStringArray(pluginInterface?.defaultPrompt),
+  }
+}
+
+export async function listPlugins(cwds?: string[], forceRemoteSync = false): Promise<UiPluginMarketplace[]> {
+  try {
+    const params: Record<string, unknown> = {}
+    if (cwds && cwds.length > 0) params.cwds = cwds
+    if (forceRemoteSync) params.forceRemoteSync = true
+    const payload = await callRpc<unknown>('plugin/list', params)
+    const record = asRecord(payload)
+    const rows = Array.isArray(record?.marketplaces) ? record.marketplaces : []
+    const marketplaces: UiPluginMarketplace[] = []
+
+    for (const row of rows) {
+      const marketplace = asRecord(row)
+      if (!marketplace) continue
+      const name = readString(marketplace.name)
+      const path = readString(marketplace.path)
+      if (!name || !path) continue
+      const marketplaceInterface = asRecord(marketplace.interface)
+      const plugins = Array.isArray(marketplace.plugins) ? marketplace.plugins : []
+      marketplaces.push({
+        name,
+        displayName: readString(marketplaceInterface?.displayName) ?? name,
+        path,
+        plugins: plugins
+          .map((plugin) => normalizePluginSummary(name, path, plugin))
+          .filter((plugin): plugin is UiPluginSummary => plugin !== null),
+      })
+    }
+
+    return marketplaces
+  } catch {
+    return []
+  }
+}
+
+function normalizePluginApp(value: unknown): UiPluginApp | null {
+  const record = asRecord(value)
+  if (!record) return null
+  const id = readString(record.id)
+  const name = readString(record.name)
+  if (!id || !name) return null
+  return {
+    id,
+    name,
+    description: readString(record.description) ?? '',
+    installUrl: readString(record.installUrl) ?? '',
+    needsAuth: readBoolean(record.needsAuth) ?? false,
+  }
+}
+
+export async function readPluginDetail(marketplacePath: string, pluginName: string): Promise<UiPluginDetail | null> {
+  try {
+    const payload = await callRpc<unknown>('plugin/read', { marketplacePath, pluginName })
+    const record = asRecord(payload)
+    const plugin = asRecord(record?.plugin)
+    if (!plugin) return null
+
+    const normalizedMarketplacePath = readString(plugin.marketplacePath)
+    const marketplaceName = readString(plugin.marketplaceName)
+    const summary = normalizePluginSummary(
+      marketplaceName ?? '',
+      normalizedMarketplacePath ?? '',
+      plugin.summary,
+    )
+    if (!summary || !marketplaceName || !normalizedMarketplacePath) return null
+
+    const skills = Array.isArray(plugin.skills) ? plugin.skills : []
+    const apps = Array.isArray(plugin.apps) ? plugin.apps : []
+
+    return {
+      marketplaceName,
+      marketplacePath: normalizedMarketplacePath,
+      summary,
+      description: readString(plugin.description) ?? '',
+      skills: skills.flatMap((skill) => {
+        const record = asRecord(skill)
+        if (!record) return []
+        const name = readString(record.name)
+        if (!name) return []
+        const skillInterface = asRecord(record.interface)
+        return [{
+          name,
+          displayName: readString(skillInterface?.displayName) ?? name,
+          description: readString(record.description) ?? '',
+          shortDescription: readString(skillInterface?.shortDescription) ?? '',
+          path: readString(record.path) ?? '',
+          enabled: readBoolean(record.enabled) ?? false,
+        }]
+      }),
+      apps: apps
+        .map((app) => normalizePluginApp(app))
+        .filter((app): app is UiPluginApp => app !== null),
+      mcpServers: readStringArray(plugin.mcpServers),
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function installPlugin(marketplacePath: string, pluginName: string): Promise<UiPluginInstallResult | null> {
+  try {
+    const payload = await callRpc<unknown>('plugin/install', { marketplacePath, pluginName })
+    const record = asRecord(payload)
+    return {
+      authPolicy: readString(record?.authPolicy) ?? '',
+      appsNeedingAuth: (Array.isArray(record?.appsNeedingAuth) ? record?.appsNeedingAuth : [])
+        .map((app) => normalizePluginApp(app))
+        .filter((app): app is UiPluginApp => app !== null),
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function uninstallPlugin(pluginId: string): Promise<boolean> {
+  try {
+    await callRpc('plugin/uninstall', { pluginId })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function listApps(params: { threadId?: string; forceRefetch?: boolean; limit?: number } = {}): Promise<UiAppInfo[]> {
+  try {
+    const payload = await callRpc<unknown>('app/list', params)
+    const record = asRecord(payload)
+    const rows = Array.isArray(record?.data) ? record.data : []
+    return rows.flatMap((row) => {
+      const app = asRecord(row)
+      if (!app) return []
+      const id = readString(app.id)
+      const name = readString(app.name)
+      if (!id || !name) return []
+      const metadata = asRecord(app.appMetadata)
+      const labelsRecord = asRecord(app.labels)
+      const labels: Record<string, string> = {}
+      if (labelsRecord) {
+        for (const [key, value] of Object.entries(labelsRecord)) {
+          const normalized = readString(value)
+          if (normalized) labels[key] = normalized
+        }
+      }
+      return [{
+        id,
+        name,
+        description: readString(app.description) ?? '',
+        installUrl: readString(app.installUrl) ?? '',
+        logoUrl: readString(app.logoUrl) ?? '',
+        logoUrlDark: readString(app.logoUrlDark) ?? '',
+        distributionChannel: readString(app.distributionChannel) ?? '',
+        isAccessible: readBoolean(app.isAccessible) ?? false,
+        isEnabled: readBoolean(app.isEnabled) ?? false,
+        categories: readStringArray(metadata?.categories),
+        labels,
+        pluginDisplayNames: readStringArray(app.pluginDisplayNames),
+      }]
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function listMcpServers(limit = 100): Promise<UiMcpServerStatus[]> {
+  try {
+    const payload = await callRpc<unknown>('mcpServerStatus/list', { limit, detail: 'full' })
+    const record = asRecord(payload)
+    const rows = Array.isArray(record?.data) ? record.data : []
+    return rows.flatMap((row) => {
+      const server = asRecord(row)
+      if (!server) return []
+      const name = readString(server.name)
+      if (!name) return []
+      const toolsRecord = asRecord(server.tools)
+      const tools: UiMcpToolInfo[] = []
+      if (toolsRecord) {
+        for (const [toolName, value] of Object.entries(toolsRecord)) {
+          const tool = asRecord(value)
+          tools.push({
+            name: toolName,
+            description: readString(tool?.description) ?? '',
+          })
+        }
+      }
+      return [{
+        name,
+        authStatus: readString(server.authStatus) ?? 'unsupported',
+        tools,
+        resourceCount: Array.isArray(server.resources) ? server.resources.length : 0,
+        resourceTemplateCount: Array.isArray(server.resourceTemplates) ? server.resourceTemplates.length : 0,
+      }]
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function startMcpOauthLogin(serverName: string): Promise<string | null> {
+  try {
+    const payload = await callRpc<unknown>('mcpServer/oauth/login', { name: serverName })
+    const record = asRecord(payload)
+    return readString(record?.authorizationUrl) ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function reloadMcpServers(): Promise<boolean> {
+  try {
+    await callRpc('config/mcpServer/reload', {})
+    return true
+  } catch {
+    return false
   }
 }
 
