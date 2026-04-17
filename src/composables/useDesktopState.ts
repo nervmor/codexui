@@ -985,7 +985,7 @@ export function useDesktopState() {
         await resumeThread(threadId)
       }
 
-      await startThreadTurn(
+      const startedTurnId = await startThreadTurn(
         threadId,
         pending.text,
         pending.imageUrls,
@@ -995,6 +995,7 @@ export function useDesktopState() {
         pending.fileAttachments,
         pending.collaborationMode,
       )
+      registerActiveTurn(threadId, startedTurnId)
 
       resumedThreadById.value = {
         ...resumedThreadById.value,
@@ -1964,6 +1965,23 @@ export function useDesktopState() {
         ...previous,
         [turnId]: turnIndex,
       },
+    }
+  }
+
+  function registerActiveTurn(threadId: string, turnId: string): void {
+    const normalizedThreadId = threadId.trim()
+    const normalizedTurnId = turnId.trim()
+    if (!normalizedThreadId || !normalizedTurnId) return
+
+    pendingTurnStartsById.set(normalizedTurnId, {
+      threadId: normalizedThreadId,
+      turnId: normalizedTurnId,
+      startedAtMs: Date.now(),
+    })
+    setTurnIndexForThread(normalizedThreadId, normalizedTurnId, inferNextTurnIndex(normalizedThreadId))
+    activeTurnIdByThreadId.value = {
+      ...activeTurnIdByThreadId.value,
+      [normalizedThreadId]: normalizedTurnId,
     }
   }
 
@@ -3086,7 +3104,7 @@ export function useDesktopState() {
       }
 
       try {
-        await startThreadTurn(
+        const startedTurnId = await startThreadTurn(
           threadId,
           nextText,
           imageUrls,
@@ -3096,6 +3114,7 @@ export function useDesktopState() {
           fileAttachments,
           collaborationMode,
         )
+        registerActiveTurn(threadId, startedTurnId)
       } catch (unknownError) {
         if (modelId && modelId !== MODEL_FALLBACK_ID && isUnsupportedChatGptModelError(unknownError)) {
           await applyFallbackModelSelection()
@@ -3108,7 +3127,7 @@ export function useDesktopState() {
             collaborationMode,
             fallbackRetried: true,
           })
-          await startThreadTurn(
+          const startedTurnId = await startThreadTurn(
             threadId,
             nextText,
             imageUrls,
@@ -3118,6 +3137,7 @@ export function useDesktopState() {
             fileAttachments,
             collaborationMode,
           )
+          registerActiveTurn(threadId, startedTurnId)
         } else {
           throw unknownError
         }
@@ -3176,7 +3196,17 @@ export function useDesktopState() {
     const threadId = selectedThreadId.value
     if (!threadId) return
     if (inProgressById.value[threadId] !== true) return
-    const turnId = activeTurnIdByThreadId.value[threadId]
+    let turnId = activeTurnIdByThreadId.value[threadId]
+    if (!turnId) {
+      await syncFromNotifications()
+      turnId = activeTurnIdByThreadId.value[threadId]
+    }
+    if (!turnId) {
+      const errorMessage = 'Active turn is still initializing. Try stopping again in a moment.'
+      setTurnErrorForThread(threadId, errorMessage)
+      error.value = errorMessage
+      return
+    }
 
     isInterruptingTurn.value = true
     error.value = ''

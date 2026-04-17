@@ -14,6 +14,7 @@ import type {
   ReasoningEffort,
   ThreadListResponse,
   ThreadReadResponse,
+  TurnStartResponse,
 } from './appServerDtos'
 import { normalizeCodexApiError } from './codexErrors'
 import {
@@ -924,7 +925,7 @@ export async function startThreadTurn(
   skills?: Array<{ name: string; path: string }>,
   fileAttachments: FileAttachmentParam[] = [],
   collaborationMode?: CollaborationModeKind,
-): Promise<void> {
+): Promise<string> {
   try {
     const normalizedModel = model?.trim() ?? ''
     const finalText = buildTextWithAttachments(text, fileAttachments)
@@ -966,7 +967,8 @@ export async function startThreadTurn(
         },
       }
     }
-    await callRpc('turn/start', params)
+    const response = await callRpc<TurnStartResponse>('turn/start', params)
+    return readString(response?.turn?.id)?.trim() ?? ''
   } catch (error) {
     throw normalizeCodexApiError(error, `Failed to start turn for thread ${threadId}`, 'turn/start')
   }
