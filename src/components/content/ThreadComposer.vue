@@ -56,47 +56,6 @@
         </span>
       </div>
 
-      <div v-if="selectedSkills.length > 0" class="thread-composer-skill-chips">
-        <span v-for="skill in selectedSkills" :key="skill.path" class="thread-composer-skill-chip">
-          <span class="thread-composer-skill-chip-name">{{ skill.name }}</span>
-          <button
-            class="thread-composer-skill-chip-remove"
-            type="button"
-            :aria-label="`Remove skill ${skill.name}`"
-            @click="removeSkill(skill.path)"
-          >×</button>
-        </span>
-      </div>
-
-      <div v-if="selectedPlugins.length > 0 || selectedApps.length > 0" class="thread-composer-skill-chips">
-        <span
-          v-for="plugin in selectedPlugins"
-          :key="plugin.path"
-          class="thread-composer-skill-chip thread-composer-skill-chip--plugin"
-        >
-          <span class="thread-composer-skill-chip-name">{{ plugin.name }}</span>
-          <button
-            class="thread-composer-skill-chip-remove"
-            type="button"
-            :aria-label="`Remove plugin ${plugin.name}`"
-            @click="removePlugin(plugin.path)"
-          >×</button>
-        </span>
-        <span
-          v-for="app in selectedApps"
-          :key="app.path"
-          class="thread-composer-skill-chip thread-composer-skill-chip--app"
-        >
-          <span class="thread-composer-skill-chip-name">{{ app.name }}</span>
-          <button
-            class="thread-composer-skill-chip-remove"
-            type="button"
-            :aria-label="`Remove app ${app.name}`"
-            @click="removeApp(app.path)"
-          >×</button>
-        </span>
-      </div>
-
       <div
         v-if="quotaSummaryText || contextUsageSummaryText"
         class="thread-composer-rate-limit"
@@ -165,14 +124,6 @@
           @input="onInputChange"
           @keydown="onInputKeydown"
           @paste="onInputPaste"
-        />
-        <ComposerSkillPicker
-          :skills="skillOptions"
-          :visible="isSlashMenuOpen"
-          :anchor-bottom="44"
-          :anchor-left="0"
-          @select="onSlashSkillSelect"
-          @close="closeSlashMenu"
         />
       </div>
 
@@ -243,39 +194,6 @@
             open-direction="up"
             :disabled="disabled || !activeThreadId || models.length === 0 || isTurnInProgress"
             @update:model-value="onModelSelect"
-          />
-
-          <ComposerSearchDropdown
-            class="thread-composer-control"
-            :options="skillDropdownOptions"
-            :selected-values="selectedSkillPaths"
-            placeholder="Skills"
-            search-placeholder="Search skills..."
-            open-direction="up"
-            :disabled="disabled || !activeThreadId || isTurnInProgress"
-            @toggle="onSkillDropdownToggle"
-          />
-
-          <ComposerSearchDropdown
-            class="thread-composer-control"
-            :options="pluginDropdownOptions"
-            :selected-values="selectedPluginPaths"
-            placeholder="Plugins"
-            search-placeholder="Search plugins..."
-            open-direction="up"
-            :disabled="disabled || !activeThreadId || isTurnInProgress || pluginDropdownOptions.length === 0"
-            @toggle="onPluginDropdownToggle"
-          />
-
-          <ComposerSearchDropdown
-            class="thread-composer-control"
-            :options="appDropdownOptions"
-            :selected-values="selectedAppPaths"
-            placeholder="Apps"
-            search-placeholder="Search apps..."
-            open-direction="up"
-            :disabled="disabled || !activeThreadId || isTurnInProgress || appDropdownOptions.length === 0"
-            @toggle="onAppDropdownToggle"
           />
 
           <ComposerDropdown
@@ -400,8 +318,6 @@ import IconTablerFolder from '../icons/IconTablerFolder.vue'
 import IconTablerMicrophone from '../icons/IconTablerMicrophone.vue'
 import IconTablerPlayerStopFilled from '../icons/IconTablerPlayerStopFilled.vue'
 import ComposerDropdown from './ComposerDropdown.vue'
-import ComposerSearchDropdown from './ComposerSearchDropdown.vue'
-import ComposerSkillPicker from './ComposerSkillPicker.vue'
 
 type SkillItem = {
   name: string
@@ -470,9 +386,6 @@ type FolderUploadGroup = {
 
 const draft = ref('')
 const selectedImages = ref<SelectedImage[]>([])
-const selectedSkills = ref<SkillItem[]>([])
-const selectedPlugins = ref<MentionItem[]>([])
-const selectedApps = ref<MentionItem[]>([])
 const fileAttachments = ref<FileAttachment[]>([])
 const folderUploadGroups = ref<FolderUploadGroup[]>([])
 
@@ -511,7 +424,6 @@ const folderPickerInputRef = ref<HTMLInputElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const { isMobile } = useMobile()
 const isAttachMenuOpen = ref(false)
-const isSlashMenuOpen = ref(false)
 const mentionStartIndex = ref<number | null>(null)
 const mentionQuery = ref('')
 const fileMentionSuggestions = ref<ComposerFileSuggestion[]>([])
@@ -539,36 +451,6 @@ const isPlanModeWaitingForModel = computed(() =>
   props.selectedCollaborationMode === 'plan' && props.selectedModel.trim().length === 0,
 )
 
-const skillOptions = computed<SkillItem[]>(() => props.skills ?? [])
-const selectedSkillPaths = computed(() => selectedSkills.value.map((s) => s.path))
-const skillDropdownOptions = computed(() =>
-  (props.skills ?? []).map((s) => ({
-    value: s.path,
-    label: s.name,
-    description: s.scope === 'repo' && s.projectName
-      ? ['Project · ' + s.projectName, s.description].filter(Boolean).join(' · ')
-      : s.description,
-  })),
-)
-const pluginOptions = computed<MentionItem[]>(() => props.plugins ?? [])
-const appOptions = computed<MentionItem[]>(() => props.apps ?? [])
-const selectedPluginPaths = computed(() => selectedPlugins.value.map((item) => item.path))
-const selectedAppPaths = computed(() => selectedApps.value.map((item) => item.path))
-const pluginDropdownOptions = computed(() =>
-  pluginOptions.value.map((item) => ({
-    value: item.path,
-    label: item.name,
-    description: item.description,
-  })),
-)
-const appDropdownOptions = computed(() =>
-  appOptions.value.map((item) => ({
-    value: item.path,
-    label: item.name,
-    description: item.description,
-  })),
-)
-
 const canSubmit = computed(() => {
   if (props.disabled) return false
   if (!props.activeThreadId) return false
@@ -576,9 +458,6 @@ const canSubmit = computed(() => {
   return draft.value.trim().length > 0
     || selectedImages.value.length > 0
     || fileAttachments.value.length > 0
-    || selectedSkills.value.length > 0
-    || selectedPlugins.value.length > 0
-    || selectedApps.value.length > 0
 })
 const standaloneFileAttachments = computed(() => {
   const grouped = new Set<string>()
@@ -612,7 +491,7 @@ const placeholderText = computed(() =>
     ? 'Select a thread to send a message'
     : isPlanModeWaitingForModel.value
       ? 'Loading models for plan mode...'
-      : 'Type a message... (@ for files, / for skills)',
+      : 'Type a message... (@ for files)',
 )
 const quotaSummaryText = computed(() => buildQuotaSummaryText(props.codexQuota ?? null))
 const quotaWeeklyRefreshText = computed(() => '')
@@ -841,22 +720,15 @@ function onSubmit(mode: 'steer' | 'queue' = 'steer'): void {
     text,
     imageUrls: selectedImages.value.map((image) => image.url),
     fileAttachments: [...fileAttachments.value],
-    skills: selectedSkills.value.map((s) => ({ name: s.name, path: s.path })),
-    mentions: [
-      ...selectedPlugins.value.map((item) => ({ name: item.name, path: item.path, token: item.token })),
-      ...selectedApps.value.map((item) => ({ name: item.name, path: item.path, token: item.token })),
-    ],
+    skills: [],
+    mentions: [],
     mode,
   })
   draft.value = ''
   selectedImages.value = []
-  selectedSkills.value = []
-  selectedPlugins.value = []
-  selectedApps.value = []
   fileAttachments.value = []
   folderUploadGroups.value = []
   isAttachMenuOpen.value = false
-  isSlashMenuOpen.value = false
   closeFileMention()
   if (isMobile.value) {
     inputRef.value?.blur()
@@ -940,18 +812,6 @@ function triggerFolderPicker(): void {
 
 function removeImage(id: string): void {
   selectedImages.value = selectedImages.value.filter((image) => image.id !== id)
-}
-
-function removeSkill(path: string): void {
-  selectedSkills.value = selectedSkills.value.filter((s) => s.path !== path)
-}
-
-function removePlugin(path: string): void {
-  selectedPlugins.value = selectedPlugins.value.filter((item) => item.path !== path)
-}
-
-function removeApp(path: string): void {
-  selectedApps.value = selectedApps.value.filter((item) => item.path !== path)
 }
 
 function removeFileAttachment(fsPath: string): void {
@@ -1122,11 +982,6 @@ function onInputChange(): void {
   if (dictationFeedback.value) {
     dictationFeedback.value = ''
   }
-  const text = draft.value
-  const shouldShowSlashMenu = text.startsWith('/')
-  if (shouldShowSlashMenu !== isSlashMenuOpen.value) {
-    isSlashMenuOpen.value = shouldShowSlashMenu
-  }
   updateFileMentionState()
 }
 
@@ -1174,22 +1029,6 @@ function onInputKeydown(event: KeyboardEvent): void {
     return
   }
 
-  if (isSlashMenuOpen.value) {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      closeSlashMenu()
-      return
-    }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault()
-      return
-    }
-  }
-}
-
-function closeSlashMenu(): void {
-  isSlashMenuOpen.value = false
-  inputRef.value?.focus()
 }
 
 function closeFileMention(): void {
@@ -1301,48 +1140,6 @@ function isMarkdownFile(path: string): boolean {
   return ext === 'md' || ext === 'mdx'
 }
 
-function onSlashSkillSelect(skill: SkillItem): void {
-  if (!selectedSkills.value.some((s) => s.path === skill.path)) {
-    selectedSkills.value = [...selectedSkills.value, skill]
-  }
-  draft.value = draft.value.startsWith('/') ? '' : draft.value
-  isSlashMenuOpen.value = false
-  inputRef.value?.focus()
-}
-
-function onSkillDropdownToggle(path: string, checked: boolean): void {
-  if (checked) {
-    const skill = (props.skills ?? []).find((s) => s.path === path)
-    if (skill && !selectedSkills.value.some((s) => s.path === path)) {
-      selectedSkills.value = [...selectedSkills.value, skill]
-    }
-  } else {
-    selectedSkills.value = selectedSkills.value.filter((s) => s.path !== path)
-  }
-}
-
-function onPluginDropdownToggle(path: string, checked: boolean): void {
-  if (checked) {
-    const plugin = pluginOptions.value.find((item) => item.path === path)
-    if (plugin && !selectedPlugins.value.some((item) => item.path === path)) {
-      selectedPlugins.value = [...selectedPlugins.value, plugin]
-    }
-  } else {
-    selectedPlugins.value = selectedPlugins.value.filter((item) => item.path !== path)
-  }
-}
-
-function onAppDropdownToggle(path: string, checked: boolean): void {
-  if (checked) {
-    const app = appOptions.value.find((item) => item.path === path)
-    if (app && !selectedApps.value.some((item) => item.path === path)) {
-      selectedApps.value = [...selectedApps.value, app]
-    }
-  } else {
-    selectedApps.value = selectedApps.value.filter((item) => item.path !== path)
-  }
-}
-
 function onDocumentClick(event: MouseEvent): void {
   if (!isAttachMenuOpen.value) return
   const root = attachMenuRootRef.value
@@ -1371,14 +1168,10 @@ watch(
   () => {
     draft.value = ''
     selectedImages.value = []
-    selectedSkills.value = []
-    selectedPlugins.value = []
-    selectedApps.value = []
     fileAttachments.value = []
     folderUploadGroups.value = []
     dictationFeedback.value = ''
     isAttachMenuOpen.value = false
-    isSlashMenuOpen.value = false
     closeFileMention()
   },
 )
