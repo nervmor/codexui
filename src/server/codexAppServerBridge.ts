@@ -793,6 +793,36 @@ function isPulseFeedCurrent(feed: StoredPulseFeed): boolean {
   return isSameLocalDate(candidateDate, new Date())
 }
 
+function buildPulseFallbackItems(
+  feedbackHistory: StoredPulseFeedbackEntry[],
+): Array<StoredPulseItem & StoredPulseItemState> {
+  const latestCurate = feedbackHistory.find((entry) => entry.kind === 'curate') ?? null
+  if (!latestCurate) return []
+
+  const createdAt = new Date(latestCurate.createdAtIso)
+  if (Number.isNaN(createdAt.getTime())) return []
+
+  const ageMs = Date.now() - createdAt.getTime()
+  const maxAgeMs = 7 * 24 * 60 * 60 * 1000
+  if (ageMs > maxAgeMs) return []
+
+  return [
+    {
+      id: `curate-fallback:${latestCurate.id}`,
+      title: 'Today watchlist',
+      summary: latestCurate.text,
+      details: [
+        'No cached Pulse feed was found for today.',
+        'Showing your latest curation request as a temporary watchlist so the Today view is not empty.',
+        `Source curation: ${latestCurate.text}`,
+      ].join('\n\n'),
+      createdAtIso: new Date().toISOString(),
+      tags: ['Curate fallback'],
+      ...createDefaultPulseItemState(),
+    },
+  ]
+}
+
 async function readActivePulseAccount(): Promise<{ planType: string | null }> {
   try {
     const raw = await readFile(getCodexAccountsStatePath(), 'utf8')
@@ -834,14 +864,18 @@ async function buildPulseResponse(): Promise<{
     readActivePulseAccount(),
   ])
   const currentFeed = isPulseFeedCurrent(feed) ? feed : { lastDeliveredAtIso: null, items: [] }
-  const items = currentFeed.items.map((item) => ({
+  const feedItems = currentFeed.items.map((item) => ({
     ...item,
     ...normalizePulseItemState(state.itemStates[item.id]),
   }))
+  const fallbackItems = currentFeed.items.length === 0 ? buildPulseFallbackItems(state.feedbackHistory) : []
+  const items = feedItems.length > 0 ? feedItems : fallbackItems
 
   const availabilityNote = state.settings.referenceMemoryInSuggestions
     ? (items.length > 0
-      ? 'Official Pulse is currently shipped on web, iOS, and Android. This desktop preview is rendering the latest cached daily feed.'
+      ? (feedItems.length > 0
+        ? 'Official Pulse is currently shipped on web, iOS, and Android. This desktop preview is rendering the latest cached daily feed.'
+        : 'No cached Pulse feed was found for today, so this desktop preview is showing your most recent curation as a temporary watchlist.')
       : 'Official Pulse is currently shipped on web, iOS, and Android, not the desktop app. This desktop preview keeps Today, curation, and settings ready while waiting for a daily feed.')
     : 'Reference memory in suggestions is turned off, so Pulse cards are paused until you turn it back on.'
 
@@ -850,7 +884,7 @@ async function buildPulseResponse(): Promise<{
     items: state.settings.referenceMemoryInSuggestions ? items : [],
     feedbackHistory: state.feedbackHistory,
     settings: state.settings,
-    lastDeliveredAtIso: currentFeed.lastDeliveredAtIso,
+    lastDeliveredAtIso: feedItems.length > 0 ? currentFeed.lastDeliveredAtIso : null,
     planType: account.planType,
     availabilityNote,
     officialSupport: {
