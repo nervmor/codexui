@@ -42,17 +42,37 @@
     <div v-if="toast" class="skills-hub-toast" :class="toastClass">{{ toast.text }}</div>
 
     <div v-if="filteredInstalled.length > 0" class="skills-hub-section">
-      <button class="skills-hub-section-toggle" type="button" @click="isInstalledOpen = !isInstalledOpen">
+      <div class="skills-hub-section-heading">
         <span class="skills-hub-section-title">Installed ({{ filteredInstalled.length }})</span>
-        <IconTablerChevronRight class="skills-hub-section-chevron" :class="{ 'is-open': isInstalledOpen }" />
-      </button>
-      <div v-if="isInstalledOpen" class="skills-hub-grid">
-        <SkillCard
-          v-for="skill in filteredInstalled"
-          :key="skill.path || `${skill.owner}/${skill.name}`"
-          :skill="skill"
-          @select="(skill) => openDetail(skill as HubSkill)"
-        />
+      </div>
+      <div class="skills-hub-category-list">
+        <div
+          v-for="group in installedSkillGroups"
+          :key="`installed-${group.key}`"
+          class="skills-hub-category"
+        >
+          <button
+            class="skills-hub-category-toggle"
+            type="button"
+            :aria-expanded="isSkillGroupOpen('installed', group.key)"
+            @click="toggleSkillGroup('installed', group.key)"
+          >
+            <IconTablerChevronRight
+              class="skills-hub-section-chevron"
+              :class="{ 'is-open': isSkillGroupOpen('installed', group.key) }"
+            />
+            <span class="skills-hub-category-title">{{ group.label }}</span>
+            <span class="skills-hub-category-count">{{ group.skills.length }}</span>
+          </button>
+          <div v-if="isSkillGroupOpen('installed', group.key)" class="skills-hub-grid">
+            <SkillCard
+              v-for="skill in group.skills"
+              :key="skill.path || `${skill.owner}/${skill.name}`"
+              :skill="skill"
+              @select="(skill) => openDetail(skill as HubSkill)"
+            />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -78,13 +98,34 @@
       <div v-if="isLoading" class="skills-hub-loading">Loading skills...</div>
       <div v-else-if="error" class="skills-hub-error">{{ error }}</div>
       <template v-else>
-        <div v-if="browseSkills.length > 0" class="skills-hub-grid">
-          <SkillCard
-            v-for="skill in browseSkills"
-            :key="skill.url"
-            :skill="skill"
-            @select="(skill) => openDetail(skill as HubSkill)"
-          />
+        <div v-if="browseSkills.length > 0" class="skills-hub-category-list">
+          <div
+            v-for="group in browseSkillGroups"
+            :key="`browse-${group.key}`"
+            class="skills-hub-category"
+          >
+            <button
+              class="skills-hub-category-toggle"
+              type="button"
+              :aria-expanded="isSkillGroupOpen('browse', group.key)"
+              @click="toggleSkillGroup('browse', group.key)"
+            >
+              <IconTablerChevronRight
+                class="skills-hub-section-chevron"
+                :class="{ 'is-open': isSkillGroupOpen('browse', group.key) }"
+              />
+              <span class="skills-hub-category-title">{{ group.label }}</span>
+              <span class="skills-hub-category-count">{{ group.skills.length }}</span>
+            </button>
+            <div v-if="isSkillGroupOpen('browse', group.key)" class="skills-hub-grid">
+              <SkillCard
+                v-for="skill in group.skills"
+                :key="skill.url || `${skill.owner}/${skill.name}`"
+                :skill="skill"
+                @select="(skill) => openDetail(skill as HubSkill)"
+              />
+            </div>
+          </div>
         </div>
         <div v-else-if="query.trim()" class="skills-hub-empty">No skills found for "{{ query }}"</div>
       </template>
@@ -110,6 +151,7 @@ import IconTablerChevronRight from '../icons/IconTablerChevronRight.vue'
 import SkillCard from './SkillCard.vue'
 import SkillDetailModal, { type HubSkill } from './SkillDetailModal.vue'
 import { useGithubSkillsSync } from '../../composables/useGithubSkillsSync'
+import { groupSkillsByNamePrefix } from '../../utils/skillsGrouping'
 
 const EMPTY_SKILL: HubSkill = { name: '', owner: '', description: '', url: '', installed: false }
 const SKILLS_HUB_CACHE_KEY = 'codex-web-local.skills-hub.cache.v1'
@@ -123,7 +165,7 @@ const installedSkills = ref<HubSkill[]>([])
 const totalCount = ref(0)
 const isLoading = ref(false)
 const error = ref('')
-const isInstalledOpen = ref(true)
+const openSkillGroupKeys = ref(new Set<string>())
 const isDetailOpen = ref(false)
 const detailSkill = ref<HubSkill>(EMPTY_SKILL)
 const toast = ref<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -155,6 +197,28 @@ const filteredInstalled = computed(() => {
     (s.displayName ?? '').toLowerCase().includes(q),
   )
 })
+const installedSkillGroups = computed(() => groupSkillsByNamePrefix(filteredInstalled.value))
+const browseSkillGroups = computed(() => groupSkillsByNamePrefix(browseSkills.value))
+
+function skillGroupStateKey(section: 'installed' | 'browse', groupKey: string): string {
+  return `${section}:${groupKey}`
+}
+
+function isSkillGroupOpen(section: 'installed' | 'browse', groupKey: string): boolean {
+  if (query.value.trim()) return true
+  return openSkillGroupKeys.value.has(skillGroupStateKey(section, groupKey))
+}
+
+function toggleSkillGroup(section: 'installed' | 'browse', groupKey: string): void {
+  const stateKey = skillGroupStateKey(section, groupKey)
+  const next = new Set(openSkillGroupKeys.value)
+  if (next.has(stateKey)) {
+    next.delete(stateKey)
+  } else {
+    next.add(stateKey)
+  }
+  openSkillGroupKeys.value = next
+}
 
 function showToast(text: string, type: 'success' | 'error' = 'success'): void {
   toast.value = { text, type }
@@ -439,6 +503,10 @@ onMounted(() => {
   @apply flex flex-col gap-2;
 }
 
+.skills-hub-section-heading {
+  @apply flex items-center gap-1.5 text-sm font-medium text-zinc-600;
+}
+
 .skills-hub-section-toggle {
   @apply flex items-center gap-1.5 border-0 bg-transparent p-0 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 cursor-pointer;
 }
@@ -453,6 +521,26 @@ onMounted(() => {
 
 .skills-hub-section-chevron.is-open {
   @apply rotate-90;
+}
+
+.skills-hub-category-list {
+  @apply flex flex-col gap-2;
+}
+
+.skills-hub-category {
+  @apply flex flex-col gap-2;
+}
+
+.skills-hub-category-toggle {
+  @apply flex w-full items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 cursor-pointer;
+}
+
+.skills-hub-category-title {
+  @apply flex-1 min-w-0 truncate;
+}
+
+.skills-hub-category-count {
+  @apply rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 leading-none;
 }
 
 .skills-hub-grid {
