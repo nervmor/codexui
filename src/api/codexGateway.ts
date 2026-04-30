@@ -35,6 +35,9 @@ import type {
   UiCodexModel,
   UiCreditsSnapshot,
   UiFileChange,
+  UiGitBranch,
+  UiGitRepositoryState,
+  UiGitWorktree,
   UiMessage,
   UiProjectGroup,
   UiReviewAction,
@@ -92,6 +95,11 @@ export type WorktreeCreateResult = {
   cwd: string
   branch: string
   gitRoot: string
+}
+
+export type CreateWorktreeOptions = {
+  branch?: string
+  permanent?: boolean
 }
 
 export type ThreadSearchResult = {
@@ -1113,6 +1121,52 @@ function normalizeWorkspaceRootsState(payload: unknown): WorkspaceRootsState {
   }
 }
 
+function normalizeGitBranch(value: unknown): UiGitBranch | null {
+  const record = asRecord(value)
+  const name = readString(record?.name)
+  if (!record || !name) return null
+  return {
+    name,
+    isCurrent: readBoolean(record.isCurrent) ?? false,
+    isCheckedOut: readBoolean(record.isCheckedOut) ?? false,
+    worktreePath: readString(record.worktreePath),
+  }
+}
+
+function normalizeGitWorktree(value: unknown): UiGitWorktree | null {
+  const record = asRecord(value)
+  const path = readString(record?.path)
+  if (!record || !path) return null
+  return {
+    path,
+    branch: readString(record.branch),
+    headSha: readString(record.headSha),
+    isCurrent: readBoolean(record.isCurrent) ?? false,
+    isDetached: readBoolean(record.isDetached) ?? false,
+  }
+}
+
+function normalizeGitRepositoryState(payload: unknown): UiGitRepositoryState {
+  const record = asRecord(payload) ?? {}
+  const branches = Array.isArray(record.branches)
+    ? record.branches.map((item) => normalizeGitBranch(item)).filter((item): item is UiGitBranch => item !== null)
+    : []
+  const worktrees = Array.isArray(record.worktrees)
+    ? record.worktrees.map((item) => normalizeGitWorktree(item)).filter((item): item is UiGitWorktree => item !== null)
+    : []
+
+  return {
+    cwd: readString(record.cwd) ?? '',
+    gitRoot: readString(record.gitRoot),
+    isGitRepo: readBoolean(record.isGitRepo) ?? false,
+    currentBranch: readString(record.currentBranch),
+    headSha: readString(record.headSha),
+    isDirty: readBoolean(record.isDirty) ?? false,
+    branches,
+    worktrees,
+  }
+}
+
 export async function getWorkspaceRootsState(): Promise<WorkspaceRootsState> {
   const response = await fetch('/codex-api/workspace-roots-state')
   const payload = (await response.json()) as unknown
@@ -1126,11 +1180,40 @@ export async function getWorkspaceRootsState(): Promise<WorkspaceRootsState> {
   return normalizeWorkspaceRootsState(envelope.data)
 }
 
-export async function createWorktree(sourceCwd: string): Promise<WorktreeCreateResult> {
+export async function getGitRepositoryState(cwd: string): Promise<UiGitRepositoryState> {
+  const query = new URLSearchParams({ cwd })
+  const response = await fetch(`/codex-api/git/state?${query.toString()}`)
+  const payload = (await response.json()) as unknown
+  if (!response.ok) {
+    throw new Error(getErrorMessageFromPayload(payload, 'Failed to load Git state'))
+  }
+  const record = asRecord(payload) ?? {}
+  return normalizeGitRepositoryState(record.data)
+}
+
+export async function switchGitBranch(cwd: string, branch: string): Promise<UiGitRepositoryState> {
+  const response = await fetch('/codex-api/git/switch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd, branch }),
+  })
+  const payload = (await response.json()) as unknown
+  if (!response.ok) {
+    throw new Error(getErrorMessageFromPayload(payload, 'Failed to switch branch'))
+  }
+  const record = asRecord(payload) ?? {}
+  return normalizeGitRepositoryState(record.data)
+}
+
+export async function createWorktree(sourceCwd: string, options: CreateWorktreeOptions = {}): Promise<WorktreeCreateResult> {
   const response = await fetch('/codex-api/worktree/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sourceCwd }),
+    body: JSON.stringify({
+      sourceCwd,
+      branch: options.branch ?? '',
+      permanent: options.permanent === true,
+    }),
   })
   const payload = (await response.json()) as { data?: WorktreeCreateResult; error?: string }
   if (!response.ok || !payload.data) {

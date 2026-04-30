@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { homedir } from 'node:os'
 import { tmpdir } from 'node:os'
-import { basename, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { handleAccountRoutes } from './accountRoutes.js'
 import { handleAutomationRoutes } from './automationRoutes.js'
@@ -514,6 +514,31 @@ async function runCommandCapture(command: string, args: string[], options: { cwd
   })
 }
 
+async function runCommandWithInput(command: string, args: string[], input: string, options: { cwd?: string } = {}): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn(command, args, {
+      cwd: options.cwd,
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
+    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+    proc.on('error', reject)
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+      const details = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n')
+      const suffix = details.length > 0 ? `: ${details}` : ''
+      reject(new Error(`Command failed (${command} ${args.join(' ')})${suffix}`))
+    })
+    proc.stdin.end(input)
+  })
+}
+
 async function runCommandWithOutput(command: string, args: string[], options: { cwd?: string } = {}): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -559,6 +584,158 @@ function normalizeStringRecord(value: unknown): Record<string, string> {
     }
   }
   return next
+}
+
+type GitWorktreeInfo = {
+  path: string
+  branch: string | null
+  headSha: string | null
+  isDetached: boolean
+}
+
+type GitRepositoryState = {
+  cwd: string
+  gitRoot: string | null
+  isGitRepo: boolean
+  currentBranch: string | null
+  headSha: string | null
+  isDirty: boolean
+  branches: Array<{
+    name: string
+    isCurrent: boolean
+    isCheckedOut: boolean
+    worktreePath: string | null
+  }>
+  worktrees: Array<GitWorktreeInfo & { isCurrent: boolean }>
+}
+
+function normalizeRefName(value: string): string {
+  return value.replace(/^refs\/heads\//u, '').trim()
+}
+
+function parseGitWorktreeList(raw: string): GitWorktreeInfo[] {
+  const worktrees: GitWorktreeInfo[] = []
+  let current: GitWorktreeInfo | null = null
+
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      if (current) worktrees.push(current)
+      current = null
+      continue
+    }
+
+    const [key, ...rest] = trimmed.split(' ')
+    const value = rest.join(' ')
+    if (key === 'worktree') {
+      if (current) worktrees.push(current)
+      current = { path: value, branch: null, headSha: null, isDetached: false }
+    } else if (current && key === 'HEAD') {
+      current.headSha = value || null
+    } else if (current && key === 'branch') {
+      current.branch = normalizeRefName(value) || null
+    } else if (current && key === 'detached') {
+      current.isDetached = true
+    }
+  }
+
+  if (current) worktrees.push(current)
+  return worktrees
+}
+
+async function resolveGitRoot(cwd: string): Promise<string | null> {
+  try {
+    return await runCommandCapture('git', ['rev-parse', '--show-toplevel'], { cwd })
+  } catch (error) {
+    if (isNotGitRepositoryError(error)) return null
+    throw error
+  }
+}
+
+async function readCurrentGitBranch(cwd: string): Promise<string | null> {
+  try {
+    return await runCommandCapture('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd })
+  } catch {
+    return null
+  }
+}
+
+async function readGitRepositoryState(cwd: string): Promise<GitRepositoryState> {
+  const normalizedCwd = isAbsolute(cwd) ? cwd : resolve(cwd)
+  const gitRoot = await resolveGitRoot(normalizedCwd)
+  if (!gitRoot) {
+    return {
+      cwd: normalizedCwd,
+      gitRoot: null,
+      isGitRepo: false,
+      currentBranch: null,
+      headSha: null,
+      isDirty: false,
+      branches: [],
+      worktrees: [],
+    }
+  }
+
+  const [currentBranch, headShaRaw, statusRaw, branchesRaw, worktreesRaw] = await Promise.all([
+    readCurrentGitBranch(gitRoot),
+    runCommandCapture('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot }).catch(() => ''),
+    runCommandCapture('git', ['status', '--porcelain'], { cwd: gitRoot }).catch(() => ''),
+    runCommandCapture('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads'], { cwd: gitRoot }).catch(() => ''),
+    runCommandCapture('git', ['worktree', 'list', '--porcelain'], { cwd: gitRoot }).catch(() => ''),
+  ])
+
+  const worktrees = parseGitWorktreeList(worktreesRaw)
+  const branchWorktreePath = new Map<string, string>()
+  for (const worktree of worktrees) {
+    if (worktree.branch) branchWorktreePath.set(worktree.branch, worktree.path)
+  }
+
+  const branches = branchesRaw
+    .split('\n')
+    .map((branch) => branch.trim())
+    .filter(Boolean)
+    .map((branch) => ({
+      name: branch,
+      isCurrent: branch === currentBranch,
+      isCheckedOut: branchWorktreePath.has(branch),
+      worktreePath: branchWorktreePath.get(branch) ?? null,
+    }))
+
+  return {
+    cwd: normalizedCwd,
+    gitRoot,
+    isGitRepo: true,
+    currentBranch,
+    headSha: headShaRaw || null,
+    isDirty: statusRaw.trim().length > 0,
+    branches,
+    worktrees: worktrees.map((worktree) => ({
+      ...worktree,
+      isCurrent: worktree.path === gitRoot,
+    })),
+  }
+}
+
+async function applyLocalGitChangesToWorktree(sourceGitRoot: string, worktreeCwd: string): Promise<void> {
+  const diff = await runCommandCapture('git', ['diff', '--binary', 'HEAD'], { cwd: sourceGitRoot }).catch(() => '')
+  if (diff.trim().length > 0) {
+    await runCommandWithInput('git', ['apply', '--whitespace=nowarn'], diff, { cwd: worktreeCwd })
+  }
+
+  const untrackedRaw = await runCommandCapture('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd: sourceGitRoot }).catch(() => '')
+  for (const relativePath of untrackedRaw.split('\0')) {
+    if (!relativePath) continue
+    const sourcePath = join(sourceGitRoot, relativePath)
+    const targetPath = join(worktreeCwd, relativePath)
+    const sourceInfo = await lstat(sourcePath).catch(() => null)
+    if (!sourceInfo) continue
+    await mkdir(dirname(targetPath), { recursive: true })
+    await cp(sourcePath, targetPath, {
+      recursive: sourceInfo.isDirectory(),
+      force: true,
+      preserveTimestamps: true,
+    })
+  }
 }
 
 function getCodexAuthPath(): string {
@@ -1568,9 +1745,50 @@ export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
         return
       }
 
+      if (req.method === 'GET' && url.pathname === '/codex-api/git/state') {
+        const rawCwd = url.searchParams.get('cwd')?.trim() ?? ''
+        if (!rawCwd) {
+          setJson(res, 400, { error: 'Missing cwd' })
+          return
+        }
+
+        try {
+          setJson(res, 200, { data: await readGitRepositoryState(rawCwd) })
+        } catch (error) {
+          setJson(res, 500, { error: getErrorMessage(error, 'Failed to load Git state') })
+        }
+        return
+      }
+
+      if (req.method === 'POST' && url.pathname === '/codex-api/git/switch') {
+        const payload = asRecord(await readJsonBody(req))
+        const rawCwd = typeof payload?.cwd === 'string' ? payload.cwd.trim() : ''
+        const branch = typeof payload?.branch === 'string' ? payload.branch.trim() : ''
+        if (!rawCwd || !branch) {
+          setJson(res, 400, { error: 'Missing cwd or branch' })
+          return
+        }
+
+        const cwd = isAbsolute(rawCwd) ? rawCwd : resolve(rawCwd)
+        try {
+          const gitRoot = await resolveGitRoot(cwd)
+          if (!gitRoot) {
+            setJson(res, 400, { error: 'Not a Git repository' })
+            return
+          }
+          await runCommand('git', ['switch', branch], { cwd: gitRoot })
+          setJson(res, 200, { data: await readGitRepositoryState(gitRoot) })
+        } catch (error) {
+          setJson(res, 500, { error: getErrorMessage(error, 'Failed to switch branch') })
+        }
+        return
+      }
+
       if (req.method === 'POST' && url.pathname === '/codex-api/worktree/create') {
         const payload = asRecord(await readJsonBody(req))
         const rawSourceCwd = typeof payload?.sourceCwd === 'string' ? payload.sourceCwd.trim() : ''
+        const requestedBranch = typeof payload?.branch === 'string' ? payload.branch.trim() : ''
+        const permanent = payload?.permanent === true
         if (!rawSourceCwd) {
           setJson(res, 400, { error: 'Missing sourceCwd' })
           return
@@ -1601,42 +1819,59 @@ export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
           const worktreesRoot = join(getCodexHomeDir(), 'worktrees')
           await mkdir(worktreesRoot, { recursive: true })
 
-          // Match Codex desktop layout so project grouping resolves to repo name:
-          // ~/.codex/worktrees/<id>/<repoName>
           let worktreeId = ''
           let worktreeParent = ''
           let worktreeCwd = ''
           for (let attempt = 0; attempt < 12; attempt += 1) {
             const candidate = randomBytes(2).toString('hex')
-            const parent = join(worktreesRoot, candidate)
+            const parent = permanent ? worktreesRoot : join(worktreesRoot, candidate)
+            const cwdCandidate = permanent
+              ? join(worktreesRoot, `${repoName}-${candidate}`)
+              : join(parent, repoName)
             try {
-              await stat(parent)
+              await stat(permanent ? cwdCandidate : parent)
               continue
             } catch {
               worktreeId = candidate
               worktreeParent = parent
-              worktreeCwd = join(parent, repoName)
+              worktreeCwd = cwdCandidate
               break
             }
           }
           if (!worktreeId || !worktreeParent || !worktreeCwd) {
             throw new Error('Failed to allocate a unique worktree id')
           }
-          const branch = `codex/${worktreeId}`
+          const selectedRef = requestedBranch || 'HEAD'
+          const currentBranch = await readCurrentGitBranch(gitRoot)
+          const shouldCopyLocalChanges = !requestedBranch || requestedBranch === currentBranch
 
           await mkdir(worktreeParent, { recursive: true })
           try {
-            await runCommand('git', ['worktree', 'add', '-b', branch, worktreeCwd, 'HEAD'], { cwd: gitRoot })
+            await runCommand('git', ['worktree', 'add', '--detach', worktreeCwd, selectedRef], { cwd: gitRoot })
           } catch (error) {
             if (!isMissingHeadError(error)) throw error
             await ensureRepoHasInitialCommit(gitRoot)
-            await runCommand('git', ['worktree', 'add', '-b', branch, worktreeCwd, 'HEAD'], { cwd: gitRoot })
+            await runCommand('git', ['worktree', 'add', '--detach', worktreeCwd, 'HEAD'], { cwd: gitRoot })
+          }
+
+          if (shouldCopyLocalChanges) {
+            await applyLocalGitChangesToWorktree(gitRoot, worktreeCwd)
+          }
+
+          if (permanent) {
+            const existingState = await readWorkspaceRootsState()
+            const label = `${repoName} (${worktreeId})`
+            await writeWorkspaceRootsState({
+              order: [worktreeCwd, ...existingState.order.filter((item) => item !== worktreeCwd)],
+              labels: { ...existingState.labels, [worktreeCwd]: label },
+              active: [worktreeCwd, ...existingState.active.filter((item) => item !== worktreeCwd)],
+            })
           }
 
           setJson(res, 200, {
             data: {
               cwd: worktreeCwd,
-              branch,
+              branch: requestedBranch || currentBranch || 'HEAD',
               gitRoot,
             },
           })

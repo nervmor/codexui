@@ -246,6 +246,32 @@ export type UiProjectGroup = {
   threads: UiThread[]
 }
 
+export type UiGitBranch = {
+  name: string
+  isCurrent: boolean
+  isCheckedOut: boolean
+  worktreePath: string | null
+}
+
+export type UiGitWorktree = {
+  path: string
+  branch: string | null
+  headSha: string | null
+  isCurrent: boolean
+  isDetached: boolean
+}
+
+export type UiGitRepositoryState = {
+  cwd: string
+  gitRoot: string | null
+  isGitRepo: boolean
+  currentBranch: string | null
+  headSha: string | null
+  isDirty: boolean
+  branches: UiGitBranch[]
+  worktrees: UiGitWorktree[]
+}
+
 export type UiRateLimitWindow = {
   usedPercent: number
   windowMinutes: number | null

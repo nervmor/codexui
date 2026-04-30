@@ -206,6 +206,9 @@
                       <button class="project-menu-item" type="button" @click="onBrowseProjectFiles(group.projectName)">
                         Browse files
                       </button>
+                      <button class="project-menu-item" type="button" @click="openGitProjectMenu(group.projectName)">
+                        Git branches
+                      </button>
                       <button class="project-menu-item" type="button" @click="openRenameProjectMenu(group.projectName)">
                         Edit name
                       </button>
@@ -217,7 +220,7 @@
                         Remove
                       </button>
                     </template>
-                    <template v-else>
+                    <template v-else-if="projectMenuMode === 'rename'">
                       <label class="project-menu-label">Project name</label>
                       <input
                         v-model="projectRenameDraft"
@@ -225,6 +228,58 @@
                         type="text"
                         @input="onProjectNameInput(group.projectName)"
                       />
+                    </template>
+                    <template v-else>
+                      <div class="project-git-menu">
+                        <div class="project-git-header">
+                          <span class="project-git-title">Git</span>
+                          <button class="project-git-refresh" type="button" @click="emit('open-project-git-menu', group.projectName)">
+                            Reload
+                          </button>
+                        </div>
+                        <p v-if="props.projectGitLoadingById[group.projectName]" class="project-git-message">
+                          Loading branches...
+                        </p>
+                        <p v-else-if="props.projectGitErrorById[group.projectName]" class="project-git-message is-error">
+                          {{ props.projectGitErrorById[group.projectName] }}
+                        </p>
+                        <p v-else-if="!getProjectGitState(group.projectName)?.isGitRepo" class="project-git-message">
+                          Not a Git repository
+                        </p>
+                        <template v-else>
+                          <label class="project-menu-label">Branch</label>
+                          <select v-model="projectBranchDraft" class="project-branch-select">
+                            <option
+                              v-for="branch in getProjectGitState(group.projectName)?.branches ?? []"
+                              :key="branch.name"
+                              :value="branch.name"
+                            >
+                              {{ formatBranchOption(branch.name, branch.isCurrent, branch.worktreePath) }}
+                            </option>
+                          </select>
+                          <div class="project-git-actions">
+                            <button
+                              class="project-git-button"
+                              type="button"
+                              :disabled="!canSwitchProjectBranch(group.projectName)"
+                              @click="emit('switch-project-branch', { projectName: group.projectName, branch: projectBranchDraft })"
+                            >
+                              Switch
+                            </button>
+                            <button
+                              class="project-git-button project-git-button-primary"
+                              type="button"
+                              :disabled="!projectBranchDraft"
+                              @click="emit('create-project-worktree', { projectName: group.projectName, branch: projectBranchDraft })"
+                            >
+                              Worktree
+                            </button>
+                          </div>
+                          <p v-if="props.projectGitActionById[group.projectName]" class="project-git-message">
+                            {{ props.projectGitActionById[group.projectName] }}
+                          </p>
+                        </template>
+                      </div>
                     </template>
                   </div>
                 </div>
@@ -374,7 +429,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
-import type { UiProjectGroup, UiThread } from '../../types/codex'
+import type { UiGitRepositoryState, UiProjectGroup, UiThread } from '../../types/codex'
 import IconTablerChevronDown from '../icons/IconTablerChevronDown.vue'
 import IconTablerChevronRight from '../icons/IconTablerChevronRight.vue'
 import IconTablerDots from '../icons/IconTablerDots.vue'
@@ -392,6 +447,10 @@ const props = defineProps<{
   isLoading: boolean
   searchQuery: string
   searchMatchedThreadIds: string[] | null
+  projectGitStateById: Record<string, UiGitRepositoryState>
+  projectGitLoadingById: Record<string, boolean>
+  projectGitErrorById: Record<string, string>
+  projectGitActionById: Record<string, string>
 }>()
 
 const emit = defineEmits<{
@@ -399,6 +458,9 @@ const emit = defineEmits<{
   archive: [threadId: string]
   'start-new-thread': [projectName: string]
   'browse-project-files': [projectName: string]
+  'open-project-git-menu': [projectName: string]
+  'switch-project-branch': [payload: { projectName: string; branch: string }]
+  'create-project-worktree': [payload: { projectName: string; branch: string }]
   'rename-project': [payload: { projectName: string; displayName: string }]
   'rename-thread': [payload: { threadId: string; title: string }]
   'remove-project': [projectName: string]
@@ -447,8 +509,9 @@ const openThreadMenuId = ref('')
 const projectMenuDirectionById = ref<Record<string, MenuDirection>>({})
 const threadMenuDirectionById = ref<Record<string, MenuDirection>>({})
 const openThreadMenuStyle = ref<Record<string, string>>({})
-const projectMenuMode = ref<'actions' | 'rename'>('actions')
+const projectMenuMode = ref<'actions' | 'rename' | 'git'>('actions')
 const projectRenameDraft = ref('')
+const projectBranchDraft = ref('')
 const renameThreadDialogVisible = ref(false)
 const renameThreadDialogThreadId = ref('')
 const renameThreadDraft = ref('')
@@ -521,6 +584,15 @@ watch(threadViewMode, (value) => {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(THREAD_VIEW_MODE_STORAGE_KEY, value)
 })
+
+watch(
+  () => props.projectGitStateById[openProjectMenuId.value],
+  (state) => {
+    if (projectMenuMode.value !== 'git' || !state) return
+    if (projectBranchDraft.value && state.branches.some((branch) => branch.name === projectBranchDraft.value)) return
+    projectBranchDraft.value = state.currentBranch ?? state.branches[0]?.name ?? ''
+  },
+)
 
 const normalizedSearchQuery = computed(() => props.searchQuery.trim().toLowerCase())
 
@@ -773,6 +845,7 @@ function closeProjectMenu(): void {
   openProjectMenuId.value = ''
   projectMenuMode.value = 'actions'
   projectRenameDraft.value = ''
+  projectBranchDraft.value = ''
 }
 
 function toggleOrganizeMenu(): void {
@@ -813,6 +886,38 @@ function openRenameProjectMenu(projectName: string): void {
   nextTick(() => {
     updateProjectMenuDirection(projectName)
   })
+}
+
+function getProjectGitState(projectName: string): UiGitRepositoryState | null {
+  return props.projectGitStateById[projectName] ?? null
+}
+
+function pickProjectBranchDraft(projectName: string): string {
+  const state = getProjectGitState(projectName)
+  return state?.currentBranch ?? state?.branches[0]?.name ?? ''
+}
+
+function openGitProjectMenu(projectName: string): void {
+  closeThreadMenu()
+  openProjectMenuId.value = projectName
+  projectMenuMode.value = 'git'
+  projectBranchDraft.value = pickProjectBranchDraft(projectName)
+  emit('open-project-git-menu', projectName)
+  nextTick(() => {
+    updateProjectMenuDirection(projectName)
+  })
+}
+
+function formatBranchOption(branch: string, isCurrent: boolean, worktreePath: string | null): string {
+  if (isCurrent) return `${branch} (current)`
+  if (worktreePath) return `${branch} (checked out)`
+  return branch
+}
+
+function canSwitchProjectBranch(projectName: string): boolean {
+  const state = getProjectGitState(projectName)
+  const branch = projectBranchDraft.value.trim()
+  return Boolean(state?.isGitRepo && branch && branch !== state.currentBranch && !props.projectGitLoadingById[projectName])
 }
 
 function onProjectNameInput(projectName: string): void {
@@ -967,7 +1072,7 @@ function updateProjectMenuDirection(projectName: string): void {
 
   projectMenuDirectionById.value = {
     ...projectMenuDirectionById.value,
-    [projectName]: resolveMenuDirection(menuWrapElement, 112),
+    [projectName]: resolveMenuDirection(menuWrapElement, projectMenuMode.value === 'git' ? 236 : 112),
   }
 }
 
@@ -1577,6 +1682,46 @@ onBeforeUnmount(() => {
 
 .project-menu-input {
   @apply px-2 py-1 text-sm text-zinc-800 bg-transparent border-none outline-none;
+}
+
+.project-git-menu {
+  @apply flex min-w-60 flex-col gap-1.5 p-1;
+}
+
+.project-git-header {
+  @apply flex items-center justify-between gap-2 px-1;
+}
+
+.project-git-title {
+  @apply text-xs font-medium text-zinc-500;
+}
+
+.project-git-refresh {
+  @apply rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800;
+}
+
+.project-branch-select {
+  @apply w-full rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-800 outline-none focus:border-zinc-400;
+}
+
+.project-git-actions {
+  @apply flex items-center gap-1.5;
+}
+
+.project-git-button {
+  @apply flex-1 rounded-md px-2 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-400 disabled:hover:bg-transparent;
+}
+
+.project-git-button-primary {
+  @apply bg-zinc-900 text-white hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-500;
+}
+
+.project-git-message {
+  @apply m-0 max-w-60 break-words px-1 text-xs text-zinc-500;
+}
+
+.project-git-message.is-error {
+  @apply text-rose-700;
 }
 
 .project-empty-row {

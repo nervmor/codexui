@@ -218,6 +218,13 @@ If a finding conflicts with current official docs or current official code, trea
   - Run build/typecheck.
   - Run Playwright in headless mode and capture a screenshot showing sidebar order.
 
+## Findings: Worktrees And Branch Selection (2026-05-01)
+
+- Official Codex worktree guidance is documented at `https://developers.openai.com/codex/app/worktrees/`.
+- The official app flow exposes Worktree as a composer control and allows choosing the starting branch before opening a new conversation.
+- Codex-managed worktrees are stored under `$CODEX_HOME/worktrees`, use detached HEAD so multiple conversations can start from the same branch, and carry over uncommitted local changes when starting from the current branch.
+- Permanent worktrees are created from the project sidebar menu and become independent workspace roots/projects.
+
 ## Findings: Plugin Runtime Surface (2026-04-17)
 
 - On `codex-cli 0.121.0`, `meta/methods` exposes stable plugin-related RPCs through the app bridge:

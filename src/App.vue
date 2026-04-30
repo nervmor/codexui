@@ -79,9 +79,16 @@
             :selected-thread-id="selectedThreadId" :is-loading="isLoadingThreads"
             :search-query="sidebarSearchQuery"
             :search-matched-thread-ids="serverMatchedThreadIds"
+            :project-git-state-by-id="projectGitStateById"
+            :project-git-loading-by-id="projectGitLoadingById"
+            :project-git-error-by-id="projectGitErrorById"
+            :project-git-action-by-id="projectGitActionById"
             @select="onSelectThread"
             @archive="onArchiveThread" @start-new-thread="onStartNewThread" @rename-project="onRenameProject"
             @browse-project-files="onBrowseProjectFiles"
+            @open-project-git-menu="onOpenProjectGitMenu"
+            @switch-project-branch="onSwitchProjectBranch"
+            @create-project-worktree="onCreateProjectWorktree"
             @rename-thread="onRenameThread"
             @remove-project="onRemoveProject" @reorder-project="onReorderProject"
             @export-thread="onExportThread" />
@@ -246,6 +253,17 @@
                   class="new-thread-runtime-dropdown"
                   v-model="newThreadRuntime"
                 />
+                <ComposerDropdown
+                  v-if="newThreadRuntime === 'worktree'"
+                  class="new-thread-branch-dropdown"
+                  :model-value="selectedNewThreadBranch"
+                  :options="newThreadBranchOptions"
+                  :placeholder="newThreadGitStateMessage"
+                  :enable-search="true"
+                  search-placeholder="Search branch"
+                  :disabled="newThreadBranchOptions.length === 0"
+                  @update:model-value="onSelectNewThreadBranch"
+                />
                 <div
                   v-if="worktreeInitStatus.phase !== 'idle'"
                   class="worktree-init-status"
@@ -351,6 +369,7 @@ import { useMobile } from './composables/useMobile'
 import {
   createWorktree,
   getAccounts,
+  getGitRepositoryState,
   getHomeDirectory,
   getProjectRootSuggestion,
   getRuntimeInfo,
@@ -361,9 +380,10 @@ import {
   removeAccount,
   refreshAccountsFromAuth,
   searchThreads,
+  switchGitBranch,
   switchAccount,
 } from './api/codexGateway'
-import type { ReasoningEffort, ThreadScrollState, UiAccountEntry, UiRateLimitSnapshot, UiRateLimitWindow } from './types/codex'
+import type { ReasoningEffort, ThreadScrollState, UiAccountEntry, UiGitRepositoryState, UiRateLimitSnapshot, UiRateLimitWindow } from './types/codex'
 import { buildFilesRouteLocation } from './utils/fileExplorer'
 
 const ThreadConversation = defineAsyncComponent(() => import('./components/content/ThreadConversation.vue'))
@@ -433,12 +453,20 @@ const isRouteSyncInProgress = ref(false)
 const hasInitialized = ref(false)
 const newThreadCwd = ref('')
 const newThreadRuntime = ref<'local' | 'worktree'>('local')
+const selectedNewThreadBranch = ref('')
+const newThreadGitState = ref<UiGitRepositoryState | null>(null)
+const isLoadingNewThreadGitState = ref(false)
+const newThreadGitStateError = ref('')
 const workspaceRootOptionsState = ref<{ order: string[]; labels: Record<string, string> }>({ order: [], labels: {} })
 const worktreeInitStatus = ref<{ phase: 'idle' | 'running' | 'error'; title: string; message: string }>({
   phase: 'idle',
   title: '',
   message: '',
 })
+const projectGitStateById = ref<Record<string, UiGitRepositoryState>>({})
+const projectGitLoadingById = ref<Record<string, boolean>>({})
+const projectGitErrorById = ref<Record<string, string>>({})
+const projectGitActionById = ref<Record<string, string>>({})
 const isSidebarCollapsed = ref(loadSidebarCollapsed())
 const sidebarSearchQuery = ref('')
 const isSidebarSearchVisible = ref(false)
@@ -564,6 +592,20 @@ const newThreadFolderOptions = computed(() => {
   }
 
   return options
+})
+const newThreadBranchOptions = computed(() => {
+  const state = newThreadGitState.value
+  if (!state?.isGitRepo) return []
+  return state.branches.map((branch) => ({
+    value: branch.name,
+    label: branch.isCurrent ? `${branch.name} (current)` : branch.name,
+  }))
+})
+const newThreadGitStateMessage = computed(() => {
+  if (isLoadingNewThreadGitState.value) return 'Loading branches'
+  if (newThreadGitStateError.value) return 'Git unavailable'
+  if (newThreadGitState.value && !newThreadGitState.value.isGitRepo) return 'Git repository required'
+  return 'Choose starting branch'
 })
 const darkModeMediaQuery = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
 
@@ -978,6 +1020,86 @@ function onBrowseProjectFiles(projectName: string): void {
   void router.push(buildFilesRouteLocation(projectCwd))
 }
 
+function getProjectPrimaryCwd(projectName: string): string {
+  const projectGroup = projectGroups.value.find((group) => group.projectName === projectName)
+  return projectGroup?.threads[0]?.cwd?.trim() ?? ''
+}
+
+function setProjectGitAction(projectName: string, message: string): void {
+  projectGitActionById.value = {
+    ...projectGitActionById.value,
+    [projectName]: message,
+  }
+}
+
+async function loadProjectGitState(projectName: string): Promise<void> {
+  const cwd = getProjectPrimaryCwd(projectName)
+  if (!cwd) return
+
+  projectGitLoadingById.value = { ...projectGitLoadingById.value, [projectName]: true }
+  projectGitErrorById.value = { ...projectGitErrorById.value, [projectName]: '' }
+  try {
+    const state = await getGitRepositoryState(cwd)
+    projectGitStateById.value = { ...projectGitStateById.value, [projectName]: state }
+  } catch (error) {
+    projectGitErrorById.value = {
+      ...projectGitErrorById.value,
+      [projectName]: error instanceof Error ? error.message : 'Failed to load Git state',
+    }
+  } finally {
+    projectGitLoadingById.value = { ...projectGitLoadingById.value, [projectName]: false }
+  }
+}
+
+function onOpenProjectGitMenu(projectName: string): void {
+  void loadProjectGitState(projectName)
+}
+
+async function onSwitchProjectBranch(payload: { projectName: string; branch: string }): Promise<void> {
+  const cwd = getProjectPrimaryCwd(payload.projectName)
+  if (!cwd || !payload.branch.trim()) return
+
+  setProjectGitAction(payload.projectName, 'Switching branch...')
+  try {
+    const state = await switchGitBranch(cwd, payload.branch)
+    projectGitStateById.value = { ...projectGitStateById.value, [payload.projectName]: state }
+    setProjectGitAction(payload.projectName, `Switched to ${state.currentBranch ?? payload.branch}`)
+    await refreshAll({ includeSelectedThreadMessages: false })
+  } catch (error) {
+    projectGitErrorById.value = {
+      ...projectGitErrorById.value,
+      [payload.projectName]: error instanceof Error ? error.message : 'Failed to switch branch',
+    }
+    setProjectGitAction(payload.projectName, '')
+  }
+}
+
+async function onCreateProjectWorktree(payload: { projectName: string; branch: string }): Promise<void> {
+  const cwd = getProjectPrimaryCwd(payload.projectName)
+  if (!cwd) return
+
+  setProjectGitAction(payload.projectName, 'Creating worktree...')
+  try {
+    const created = await createWorktree(cwd, {
+      branch: payload.branch,
+      permanent: true,
+    })
+    newThreadCwd.value = created.cwd
+    newThreadRuntime.value = 'local'
+    await loadWorkspaceRootOptionsState()
+    setProjectGitAction(payload.projectName, `Created worktree ${getPathLeafName(created.cwd)}`)
+    if (!isHomeRoute.value) {
+      await router.push({ name: 'home' })
+    }
+  } catch (error) {
+    projectGitErrorById.value = {
+      ...projectGitErrorById.value,
+      [payload.projectName]: error instanceof Error ? error.message : 'Failed to create worktree',
+    }
+    setProjectGitAction(payload.projectName, '')
+  }
+}
+
 function onStartNewThreadFromToolbar(): void {
   const cwd = selectedThread.value?.cwd?.trim() ?? ''
   if (cwd) {
@@ -1130,6 +1252,37 @@ function scheduleMobileConversationJumpToLatest(): void {
 
 function onSelectNewThreadFolder(cwd: string): void {
   newThreadCwd.value = cwd.trim()
+}
+
+function onSelectNewThreadBranch(branch: string): void {
+  selectedNewThreadBranch.value = branch.trim()
+}
+
+let newThreadGitStateRequestId = 0
+
+async function loadNewThreadGitState(): Promise<void> {
+  const cwd = newThreadCwd.value.trim()
+  const requestId = ++newThreadGitStateRequestId
+  newThreadGitState.value = null
+  newThreadGitStateError.value = ''
+  selectedNewThreadBranch.value = ''
+  if (!cwd) return
+
+  isLoadingNewThreadGitState.value = true
+  try {
+    const state = await getGitRepositoryState(cwd)
+    if (requestId !== newThreadGitStateRequestId) return
+    newThreadGitState.value = state
+    const defaultBranch = state.currentBranch || state.branches[0]?.name || ''
+    selectedNewThreadBranch.value = defaultBranch
+  } catch (error) {
+    if (requestId !== newThreadGitStateRequestId) return
+    newThreadGitStateError.value = error instanceof Error ? error.message : 'Failed to load Git state'
+  } finally {
+    if (requestId === newThreadGitStateRequestId) {
+      isLoadingNewThreadGitState.value = false
+    }
+  }
 }
 
 async function onStartAddNewProject(): Promise<void> {
@@ -1626,6 +1779,9 @@ watch(
   () => {
     worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
     void refreshDefaultProjectName()
+    if (newThreadRuntime.value === 'worktree') {
+      void loadNewThreadGitState()
+    }
   },
 )
 
@@ -1634,7 +1790,9 @@ watch(
   (runtime) => {
     if (runtime === 'local') {
       worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
+      return
     }
+    void loadNewThreadGitState()
   },
 )
 
@@ -1680,7 +1838,9 @@ async function submitFirstMessageForNewThread(
         message: 'Creating a worktree and running setup.',
       }
       try {
-        const created = await createWorktree(newThreadCwd.value)
+        const created = await createWorktree(newThreadCwd.value, {
+          branch: selectedNewThreadBranch.value,
+        })
         targetCwd = created.cwd
         newThreadCwd.value = created.cwd
         worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
@@ -1826,6 +1986,14 @@ async function submitFirstMessageForNewThread(
 
 .new-thread-runtime-dropdown {
   @apply mt-3;
+}
+
+.new-thread-branch-dropdown {
+  @apply mt-2 text-sm text-zinc-600;
+}
+
+.new-thread-branch-dropdown :deep(.composer-dropdown-trigger) {
+  @apply h-8 min-w-52 text-sm leading-5;
 }
 
 .worktree-init-status {
