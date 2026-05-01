@@ -249,21 +249,6 @@
                   add-action-label="+ Add new project"
                   :disabled="false" @update:model-value="onSelectNewThreadFolder"
                   @add-action="onStartAddNewProject" />
-                <ComposerRuntimeDropdown
-                  class="new-thread-runtime-dropdown"
-                  v-model="newThreadRuntime"
-                />
-                <ComposerDropdown
-                  v-if="newThreadRuntime === 'worktree'"
-                  class="new-thread-branch-dropdown"
-                  :model-value="selectedNewThreadBranch"
-                  :options="newThreadBranchOptions"
-                  :placeholder="newThreadGitStateMessage"
-                  :enable-search="true"
-                  search-placeholder="Search branch"
-                  :disabled="newThreadBranchOptions.length === 0"
-                  @update:model-value="onSelectNewThreadBranch"
-                />
                 <div
                   v-if="worktreeInitStatus.phase !== 'idle'"
                   class="worktree-init-status"
@@ -289,9 +274,19 @@
                   :codex-quota="codexQuota"
                   :is-turn-in-progress="false"
                   :is-interrupting-turn="false" :send-with-enter="sendWithEnter" :in-progress-submit-mode="inProgressSendMode"
-                  :dictation-click-to-toggle="dictationClickToToggle" @submit="onSubmitThreadMessage"
+                  :dictation-click-to-toggle="dictationClickToToggle"
+                  :runtime-mode="newThreadRuntime"
+                  :runtime-editable="true"
+                  :branch-options="composerBranchOptions"
+                  :selected-branch="composerSelectedBranch"
+                  :branch-placeholder="composerBranchPlaceholder"
+                  :branch-disabled="composerBranchDisabled"
+                  :branch-status="composerBranchStatus"
+                  @submit="onSubmitThreadMessage"
                   @update:selected-collaboration-mode="onSelectCollaborationMode"
-                  @update:selected-model="onSelectModel" @update:selected-reasoning-effort="onSelectReasoningEffort" />
+                  @update:selected-model="onSelectModel" @update:selected-reasoning-effort="onSelectReasoningEffort"
+                  @update:runtime-mode="onSelectRuntimeMode"
+                  @update:selected-branch="onSelectComposerBranch" />
             </div>
           </template>
           <template v-else>
@@ -336,6 +331,13 @@
                     :has-queue-above="selectedThreadQueuedMessages.length > 0"
                     :send-with-enter="sendWithEnter" :in-progress-submit-mode="inProgressSendMode"
                     :dictation-click-to-toggle="dictationClickToToggle"
+                    runtime-mode="local"
+                    :runtime-editable="false"
+                    :branch-options="composerBranchOptions"
+                    :selected-branch="composerSelectedBranch"
+                    :branch-placeholder="composerBranchPlaceholder"
+                    :branch-disabled="composerBranchDisabled"
+                    :branch-status="composerBranchStatus"
                     @update:selected-collaboration-mode="onSelectCollaborationMode"
                     @submit="onSubmitThreadMessage" @update:selected-model="onSelectModel"
                     @update:selected-reasoning-effort="onSelectReasoningEffort" @interrupt="onInterruptTurn" />
@@ -358,7 +360,6 @@ import ContentHeader from './components/content/ContentHeader.vue'
 import ThreadComposer from './components/content/ThreadComposer.vue'
 import QueuedMessages from './components/content/QueuedMessages.vue'
 import ComposerDropdown from './components/content/ComposerDropdown.vue'
-import ComposerRuntimeDropdown from './components/content/ComposerRuntimeDropdown.vue'
 import FileExplorer from './components/content/FileExplorer.vue'
 import SidebarThreadControls from './components/sidebar/SidebarThreadControls.vue'
 import IconTablerSearch from './components/icons/IconTablerSearch.vue'
@@ -454,9 +455,10 @@ const hasInitialized = ref(false)
 const newThreadCwd = ref('')
 const newThreadRuntime = ref<'local' | 'worktree'>('local')
 const selectedNewThreadBranch = ref('')
-const newThreadGitState = ref<UiGitRepositoryState | null>(null)
-const isLoadingNewThreadGitState = ref(false)
-const newThreadGitStateError = ref('')
+const composerGitState = ref<UiGitRepositoryState | null>(null)
+const isLoadingComposerGitState = ref(false)
+const composerGitStateError = ref('')
+const composerGitAction = ref('')
 const workspaceRootOptionsState = ref<{ order: string[]; labels: Record<string, string> }>({ order: [], labels: {} })
 const worktreeInitStatus = ref<{ phase: 'idle' | 'running' | 'error'; title: string; message: string }>({
   phase: 'idle',
@@ -593,19 +595,35 @@ const newThreadFolderOptions = computed(() => {
 
   return options
 })
-const newThreadBranchOptions = computed(() => {
-  const state = newThreadGitState.value
+const composerBranchOptions = computed(() => {
+  const state = composerGitState.value
   if (!state?.isGitRepo) return []
   return state.branches.map((branch) => ({
     value: branch.name,
     label: branch.isCurrent ? `${branch.name} (current)` : branch.name,
   }))
 })
-const newThreadGitStateMessage = computed(() => {
-  if (isLoadingNewThreadGitState.value) return 'Loading branches'
-  if (newThreadGitStateError.value) return 'Git unavailable'
-  if (newThreadGitState.value && !newThreadGitState.value.isGitRepo) return 'Git repository required'
-  return 'Choose starting branch'
+const composerSelectedBranch = computed(() => {
+  if (isHomeRoute.value && newThreadRuntime.value === 'worktree') {
+    return selectedNewThreadBranch.value
+  }
+  return composerGitState.value?.currentBranch ?? ''
+})
+const composerBranchPlaceholder = computed(() => {
+  if (isLoadingComposerGitState.value) return 'Loading branches'
+  if (composerGitStateError.value) return 'Git unavailable'
+  if (composerGitState.value && !composerGitState.value.isGitRepo) return 'Git repository required'
+  return 'Choose branch'
+})
+const composerBranchDisabled = computed(() => {
+  if (isLoadingComposerGitState.value || composerBranchOptions.value.length === 0) return true
+  if (!isHomeRoute.value && isSelectedThreadInProgress.value) return true
+  return false
+})
+const composerBranchStatus = computed(() => {
+  if (composerGitAction.value) return composerGitAction.value
+  if (composerGitStateError.value) return composerGitStateError.value
+  return ''
 })
 const darkModeMediaQuery = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
 
@@ -1254,33 +1272,58 @@ function onSelectNewThreadFolder(cwd: string): void {
   newThreadCwd.value = cwd.trim()
 }
 
-function onSelectNewThreadBranch(branch: string): void {
-  selectedNewThreadBranch.value = branch.trim()
+function onSelectRuntimeMode(runtime: 'local' | 'worktree'): void {
+  newThreadRuntime.value = runtime
 }
 
-let newThreadGitStateRequestId = 0
+async function onSelectComposerBranch(branch: string): Promise<void> {
+  const normalizedBranch = branch.trim()
+  if (!normalizedBranch) return
 
-async function loadNewThreadGitState(): Promise<void> {
-  const cwd = newThreadCwd.value.trim()
-  const requestId = ++newThreadGitStateRequestId
-  newThreadGitState.value = null
-  newThreadGitStateError.value = ''
+  if (isHomeRoute.value && newThreadRuntime.value === 'worktree') {
+    selectedNewThreadBranch.value = normalizedBranch
+    return
+  }
+
+  const cwd = composerCwd.value.trim()
+  if (!cwd) return
+
+  composerGitAction.value = 'Switching branch...'
+  try {
+    const state = await switchGitBranch(cwd, normalizedBranch)
+    composerGitState.value = state
+    composerGitAction.value = `Switched to ${state.currentBranch ?? normalizedBranch}`
+    await refreshAll({ includeSelectedThreadMessages: false })
+  } catch (error) {
+    composerGitStateError.value = error instanceof Error ? error.message : 'Failed to switch branch'
+    composerGitAction.value = ''
+  }
+}
+
+let composerGitStateRequestId = 0
+
+async function loadComposerGitState(): Promise<void> {
+  const cwd = composerCwd.value.trim()
+  const requestId = ++composerGitStateRequestId
+  composerGitState.value = null
+  composerGitStateError.value = ''
+  composerGitAction.value = ''
   selectedNewThreadBranch.value = ''
   if (!cwd) return
 
-  isLoadingNewThreadGitState.value = true
+  isLoadingComposerGitState.value = true
   try {
     const state = await getGitRepositoryState(cwd)
-    if (requestId !== newThreadGitStateRequestId) return
-    newThreadGitState.value = state
+    if (requestId !== composerGitStateRequestId) return
+    composerGitState.value = state
     const defaultBranch = state.currentBranch || state.branches[0]?.name || ''
     selectedNewThreadBranch.value = defaultBranch
   } catch (error) {
-    if (requestId !== newThreadGitStateRequestId) return
-    newThreadGitStateError.value = error instanceof Error ? error.message : 'Failed to load Git state'
+    if (requestId !== composerGitStateRequestId) return
+    composerGitStateError.value = error instanceof Error ? error.message : 'Failed to load Git state'
   } finally {
-    if (requestId === newThreadGitStateRequestId) {
-      isLoadingNewThreadGitState.value = false
+    if (requestId === composerGitStateRequestId) {
+      isLoadingComposerGitState.value = false
     }
   }
 }
@@ -1779,9 +1822,6 @@ watch(
   () => {
     worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
     void refreshDefaultProjectName()
-    if (newThreadRuntime.value === 'worktree') {
-      void loadNewThreadGitState()
-    }
   },
 )
 
@@ -1790,10 +1830,17 @@ watch(
   (runtime) => {
     if (runtime === 'local') {
       worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
-      return
     }
-    void loadNewThreadGitState()
+    void loadComposerGitState()
   },
+)
+
+watch(
+  () => composerCwd.value,
+  () => {
+    void loadComposerGitState()
+  },
+  { immediate: true },
 )
 
 watch(
@@ -1982,18 +2029,6 @@ async function submitFirstMessageForNewThread(
 
 .new-thread-folder-dropdown :deep(.composer-dropdown-chevron) {
   @apply h-4 w-4 sm:h-5 sm:w-5 mt-0;
-}
-
-.new-thread-runtime-dropdown {
-  @apply mt-3;
-}
-
-.new-thread-branch-dropdown {
-  @apply mt-2 text-sm text-zinc-600;
-}
-
-.new-thread-branch-dropdown :deep(.composer-dropdown-trigger) {
-  @apply h-8 min-w-52 text-sm leading-5;
 }
 
 .worktree-init-status {

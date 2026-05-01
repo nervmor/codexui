@@ -268,6 +268,35 @@
       </div>
 
     </div>
+    <div v-if="showContextBar" class="thread-composer-context-bar">
+      <ComposerRuntimeDropdown
+        v-if="runtimeEditable"
+        class="thread-composer-runtime-control"
+        :model-value="runtimeMode"
+        @update:model-value="(value) => emit('update:runtime-mode', value)"
+      />
+      <span v-else class="thread-composer-runtime-pill">
+        <IconTablerFolder class="thread-composer-context-icon" />
+        <span>Local project</span>
+      </span>
+
+      <span class="thread-composer-branch-pill">
+        <IconTablerGitFork class="thread-composer-context-icon" />
+        <ComposerDropdown
+          class="thread-composer-branch-control"
+          :model-value="selectedBranch"
+          :options="branchOptions"
+          :placeholder="branchPlaceholder"
+          open-direction="up"
+          :enable-search="true"
+          search-placeholder="Search branches"
+          :disabled="branchDisabled"
+          @update:model-value="(value) => emit('update:selected-branch', value)"
+        />
+      </span>
+
+      <span v-if="branchStatus" class="thread-composer-branch-status">{{ branchStatus }}</span>
+    </div>
     <input
       ref="photoLibraryInputRef"
       class="thread-composer-hidden-input"
@@ -317,9 +346,11 @@ import { buildReasoningEffortOptions } from '../../utils/codexModels'
 import IconTablerArrowUp from '../icons/IconTablerArrowUp.vue'
 import IconTablerFilePencil from '../icons/IconTablerFilePencil.vue'
 import IconTablerFolder from '../icons/IconTablerFolder.vue'
+import IconTablerGitFork from '../icons/IconTablerGitFork.vue'
 import IconTablerMicrophone from '../icons/IconTablerMicrophone.vue'
 import IconTablerPlayerStopFilled from '../icons/IconTablerPlayerStopFilled.vue'
 import ComposerDropdown from './ComposerDropdown.vue'
+import ComposerRuntimeDropdown from './ComposerRuntimeDropdown.vue'
 
 type SkillItem = {
   name: string
@@ -329,6 +360,8 @@ type SkillItem = {
   projectName?: string
 }
 type MentionItem = { name: string; description: string; path: string; token?: string }
+type RuntimeMode = 'local' | 'worktree'
+type BranchOption = { value: string; label: string }
 
 const props = defineProps<{
   activeThreadId: string
@@ -350,6 +383,13 @@ const props = defineProps<{
   sendWithEnter?: boolean
   inProgressSubmitMode?: 'steer' | 'queue'
   dictationClickToToggle?: boolean
+  runtimeMode?: RuntimeMode
+  runtimeEditable?: boolean
+  branchOptions?: BranchOption[]
+  selectedBranch?: string
+  branchPlaceholder?: string
+  branchDisabled?: boolean
+  branchStatus?: string
 }>()
 
 export type FileAttachment = { label: string; path: string; fsPath: string }
@@ -369,6 +409,8 @@ const emit = defineEmits<{
   'update:selected-collaboration-mode': [mode: CollaborationModeKind]
   'update:selected-model': [modelId: string]
   'update:selected-reasoning-effort': [effort: ReasoningEffort | '']
+  'update:runtime-mode': [mode: RuntimeMode]
+  'update:selected-branch': [branch: string]
 }>()
 
 type SelectedImage = {
@@ -425,6 +467,16 @@ const cameraCaptureInputRef = ref<HTMLInputElement | null>(null)
 const folderPickerInputRef = ref<HTMLInputElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const { isMobile } = useMobile()
+const runtimeMode = computed<RuntimeMode>(() => props.runtimeMode ?? 'local')
+const runtimeEditable = computed(() => props.runtimeEditable === true)
+const branchOptions = computed(() => props.branchOptions ?? [])
+const selectedBranch = computed(() => props.selectedBranch ?? '')
+const branchPlaceholder = computed(() => props.branchPlaceholder?.trim() || 'No branch')
+const branchDisabled = computed(() => props.branchDisabled === true)
+const branchStatus = computed(() => props.branchStatus?.trim() ?? '')
+const showContextBar = computed(() =>
+  Boolean(props.cwd?.trim()) || runtimeEditable.value || branchOptions.value.length > 0 || branchStatus.value.length > 0,
+)
 const isAttachMenuOpen = ref(false)
 const mentionStartIndex = ref<number | null>(null)
 const mentionQuery = ref('')
@@ -1196,6 +1248,59 @@ watch(
 
 .thread-composer-shell--no-top-radius {
   @apply rounded-t-none border-t-0;
+}
+
+.thread-composer-context-bar {
+  @apply mt-2 flex min-w-0 flex-wrap items-center gap-2 px-2;
+}
+
+.thread-composer-runtime-control {
+  @apply shrink-0;
+}
+
+.thread-composer-runtime-control :deep(.runtime-dropdown-menu-wrap) {
+  @apply top-auto bottom-[calc(100%+8px)];
+}
+
+.thread-composer-runtime-pill,
+.thread-composer-branch-pill {
+  @apply inline-flex h-7 min-w-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-sm text-zinc-600 shadow-sm;
+}
+
+.thread-composer-context-icon {
+  @apply h-3.5 w-3.5 shrink-0 text-zinc-500;
+}
+
+.thread-composer-branch-control {
+  @apply min-w-0 max-w-56;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-trigger) {
+  @apply h-auto max-w-48 text-zinc-600;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-menu) {
+  @apply min-w-72 bg-zinc-950/95 text-white border-zinc-800 shadow-2xl;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-search-input) {
+  @apply border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-option) {
+  @apply text-zinc-100 hover:bg-zinc-800;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-option.is-selected) {
+  @apply bg-zinc-800;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-empty) {
+  @apply text-zinc-500;
+}
+
+.thread-composer-branch-status {
+  @apply min-w-0 truncate text-xs text-zinc-500;
 }
 
 .thread-composer-attachments {
