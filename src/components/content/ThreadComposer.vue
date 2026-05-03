@@ -269,17 +269,6 @@
 
     </div>
     <div v-if="showContextBar" class="thread-composer-context-bar">
-      <ComposerRuntimeDropdown
-        v-if="runtimeEditable"
-        class="thread-composer-runtime-control"
-        :model-value="runtimeMode"
-        @update:model-value="(value) => emit('update:runtime-mode', value)"
-      />
-      <span v-else class="thread-composer-runtime-pill">
-        <IconTablerFolder class="thread-composer-context-icon" />
-        <span>Local project</span>
-      </span>
-
       <span class="thread-composer-branch-pill">
         <IconTablerGitFork class="thread-composer-context-icon" />
         <ComposerDropdown
@@ -345,12 +334,10 @@ import { searchComposerFiles, uploadFile, type ComposerFileSuggestion } from '..
 import { buildReasoningEffortOptions } from '../../utils/codexModels'
 import IconTablerArrowUp from '../icons/IconTablerArrowUp.vue'
 import IconTablerFilePencil from '../icons/IconTablerFilePencil.vue'
-import IconTablerFolder from '../icons/IconTablerFolder.vue'
 import IconTablerGitFork from '../icons/IconTablerGitFork.vue'
 import IconTablerMicrophone from '../icons/IconTablerMicrophone.vue'
 import IconTablerPlayerStopFilled from '../icons/IconTablerPlayerStopFilled.vue'
 import ComposerDropdown from './ComposerDropdown.vue'
-import ComposerRuntimeDropdown from './ComposerRuntimeDropdown.vue'
 
 type SkillItem = {
   name: string
@@ -360,7 +347,6 @@ type SkillItem = {
   projectName?: string
 }
 type MentionItem = { name: string; description: string; path: string; token?: string }
-type RuntimeMode = 'local' | 'worktree'
 type BranchOption = { value: string; label: string }
 
 const props = defineProps<{
@@ -383,8 +369,6 @@ const props = defineProps<{
   sendWithEnter?: boolean
   inProgressSubmitMode?: 'steer' | 'queue'
   dictationClickToToggle?: boolean
-  runtimeMode?: RuntimeMode
-  runtimeEditable?: boolean
   branchOptions?: BranchOption[]
   selectedBranch?: string
   branchPlaceholder?: string
@@ -409,7 +393,6 @@ const emit = defineEmits<{
   'update:selected-collaboration-mode': [mode: CollaborationModeKind]
   'update:selected-model': [modelId: string]
   'update:selected-reasoning-effort': [effort: ReasoningEffort | '']
-  'update:runtime-mode': [mode: RuntimeMode]
   'update:selected-branch': [branch: string]
 }>()
 
@@ -467,15 +450,13 @@ const cameraCaptureInputRef = ref<HTMLInputElement | null>(null)
 const folderPickerInputRef = ref<HTMLInputElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 const { isMobile } = useMobile()
-const runtimeMode = computed<RuntimeMode>(() => props.runtimeMode ?? 'local')
-const runtimeEditable = computed(() => props.runtimeEditable === true)
 const branchOptions = computed(() => props.branchOptions ?? [])
 const selectedBranch = computed(() => props.selectedBranch ?? '')
 const branchPlaceholder = computed(() => props.branchPlaceholder?.trim() || 'No branch')
 const branchDisabled = computed(() => props.branchDisabled === true)
 const branchStatus = computed(() => props.branchStatus?.trim() ?? '')
 const showContextBar = computed(() =>
-  Boolean(props.cwd?.trim()) || runtimeEditable.value || branchOptions.value.length > 0 || branchStatus.value.length > 0,
+  Boolean(props.cwd?.trim()) || branchOptions.value.length > 0 || branchStatus.value.length > 0,
 )
 const isAttachMenuOpen = ref(false)
 const mentionStartIndex = ref<number | null>(null)
@@ -1254,15 +1235,6 @@ watch(
   @apply mt-2 flex min-w-0 flex-wrap items-center gap-2 px-2;
 }
 
-.thread-composer-runtime-control {
-  @apply shrink-0;
-}
-
-.thread-composer-runtime-control :deep(.runtime-dropdown-menu-wrap) {
-  @apply top-auto bottom-[calc(100%+8px)];
-}
-
-.thread-composer-runtime-pill,
 .thread-composer-branch-pill {
   @apply inline-flex h-7 min-w-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-sm text-zinc-600 shadow-sm;
 }

@@ -249,17 +249,6 @@
                   add-action-label="+ Add new project"
                   :disabled="false" @update:model-value="onSelectNewThreadFolder"
                   @add-action="onStartAddNewProject" />
-                <div
-                  v-if="worktreeInitStatus.phase !== 'idle'"
-                  class="worktree-init-status"
-                  :class="{
-                    'is-running': worktreeInitStatus.phase === 'running',
-                    'is-error': worktreeInitStatus.phase === 'error',
-                  }"
-                >
-                  <strong class="worktree-init-status-title">{{ worktreeInitStatus.title }}</strong>
-                  <span class="worktree-init-status-message">{{ worktreeInitStatus.message }}</span>
-                </div>
               </div>
 
                 <ThreadComposer :active-thread-id="composerThreadContextId"
@@ -275,8 +264,6 @@
                   :is-turn-in-progress="false"
                   :is-interrupting-turn="false" :send-with-enter="sendWithEnter" :in-progress-submit-mode="inProgressSendMode"
                   :dictation-click-to-toggle="dictationClickToToggle"
-                  :runtime-mode="newThreadRuntime"
-                  :runtime-editable="true"
                   :branch-options="composerBranchOptions"
                   :selected-branch="composerSelectedBranch"
                   :branch-placeholder="composerBranchPlaceholder"
@@ -285,7 +272,6 @@
                   @submit="onSubmitThreadMessage"
                   @update:selected-collaboration-mode="onSelectCollaborationMode"
                   @update:selected-model="onSelectModel" @update:selected-reasoning-effort="onSelectReasoningEffort"
-                  @update:runtime-mode="onSelectRuntimeMode"
                   @update:selected-branch="onSelectComposerBranch" />
             </div>
           </template>
@@ -331,8 +317,6 @@
                     :has-queue-above="selectedThreadQueuedMessages.length > 0"
                     :send-with-enter="sendWithEnter" :in-progress-submit-mode="inProgressSendMode"
                     :dictation-click-to-toggle="dictationClickToToggle"
-                    runtime-mode="local"
-                    :runtime-editable="false"
                     :branch-options="composerBranchOptions"
                     :selected-branch="composerSelectedBranch"
                     :branch-placeholder="composerBranchPlaceholder"
@@ -453,18 +437,11 @@ const threadConversationRef = ref<{ jumpToLatest: () => void } | null>(null)
 const isRouteSyncInProgress = ref(false)
 const hasInitialized = ref(false)
 const newThreadCwd = ref('')
-const newThreadRuntime = ref<'local' | 'worktree'>('local')
-const selectedNewThreadBranch = ref('')
 const composerGitState = ref<UiGitRepositoryState | null>(null)
 const isLoadingComposerGitState = ref(false)
 const composerGitStateError = ref('')
 const composerGitAction = ref('')
 const workspaceRootOptionsState = ref<{ order: string[]; labels: Record<string, string> }>({ order: [], labels: {} })
-const worktreeInitStatus = ref<{ phase: 'idle' | 'running' | 'error'; title: string; message: string }>({
-  phase: 'idle',
-  title: '',
-  message: '',
-})
 const projectGitStateById = ref<Record<string, UiGitRepositoryState>>({})
 const projectGitLoadingById = ref<Record<string, boolean>>({})
 const projectGitErrorById = ref<Record<string, string>>({})
@@ -604,9 +581,6 @@ const composerBranchOptions = computed(() => {
   }))
 })
 const composerSelectedBranch = computed(() => {
-  if (isHomeRoute.value && newThreadRuntime.value === 'worktree') {
-    return selectedNewThreadBranch.value
-  }
   return composerGitState.value?.currentBranch ?? ''
 })
 const composerBranchPlaceholder = computed(() => {
@@ -1103,7 +1077,6 @@ async function onCreateProjectWorktree(payload: { projectName: string; branch: s
       permanent: true,
     })
     newThreadCwd.value = created.cwd
-    newThreadRuntime.value = 'local'
     await loadWorkspaceRootOptionsState()
     setProjectGitAction(payload.projectName, `Created worktree ${getPathLeafName(created.cwd)}`)
     if (!isHomeRoute.value) {
@@ -1272,18 +1245,9 @@ function onSelectNewThreadFolder(cwd: string): void {
   newThreadCwd.value = cwd.trim()
 }
 
-function onSelectRuntimeMode(runtime: 'local' | 'worktree'): void {
-  newThreadRuntime.value = runtime
-}
-
 async function onSelectComposerBranch(branch: string): Promise<void> {
   const normalizedBranch = branch.trim()
   if (!normalizedBranch) return
-
-  if (isHomeRoute.value && newThreadRuntime.value === 'worktree') {
-    selectedNewThreadBranch.value = normalizedBranch
-    return
-  }
 
   const cwd = composerCwd.value.trim()
   if (!cwd) return
@@ -1308,7 +1272,6 @@ async function loadComposerGitState(): Promise<void> {
   composerGitState.value = null
   composerGitStateError.value = ''
   composerGitAction.value = ''
-  selectedNewThreadBranch.value = ''
   if (!cwd) return
 
   isLoadingComposerGitState.value = true
@@ -1316,8 +1279,6 @@ async function loadComposerGitState(): Promise<void> {
     const state = await getGitRepositoryState(cwd)
     if (requestId !== composerGitStateRequestId) return
     composerGitState.value = state
-    const defaultBranch = state.currentBranch || state.branches[0]?.name || ''
-    selectedNewThreadBranch.value = defaultBranch
   } catch (error) {
     if (requestId !== composerGitStateRequestId) return
     composerGitStateError.value = error instanceof Error ? error.message : 'Failed to load Git state'
@@ -1820,18 +1781,7 @@ watch(
 watch(
   () => newThreadCwd.value,
   () => {
-    worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
     void refreshDefaultProjectName()
-  },
-)
-
-watch(
-  () => newThreadRuntime.value,
-  (runtime) => {
-    if (runtime === 'local') {
-      worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
-    }
-    void loadComposerGitState()
   },
 )
 
@@ -1846,19 +1796,9 @@ watch(
 watch(
   () => route.name,
   (name) => {
-    if (name !== 'home') {
-      worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
-    }
     if (name !== 'thread') {
       isReviewPaneOpen.value = false
     }
-  },
-)
-
-watch(
-  () => selectedThreadId.value,
-  () => {
-    worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
   },
 )
 
@@ -1876,31 +1816,7 @@ async function submitFirstMessageForNewThread(
   fileAttachments: Array<{ label: string; path: string; fsPath: string }> = [],
 ): Promise<void> {
   try {
-    worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
-    let targetCwd = newThreadCwd.value
-    if (newThreadRuntime.value === 'worktree') {
-      worktreeInitStatus.value = {
-        phase: 'running',
-        title: 'Creating worktree',
-        message: 'Creating a worktree and running setup.',
-      }
-      try {
-        const created = await createWorktree(newThreadCwd.value, {
-          branch: selectedNewThreadBranch.value,
-        })
-        targetCwd = created.cwd
-        newThreadCwd.value = created.cwd
-        worktreeInitStatus.value = { phase: 'idle', title: '', message: '' }
-      } catch {
-        worktreeInitStatus.value = {
-          phase: 'error',
-          title: 'Worktree setup failed',
-          message: 'Unable to create worktree. Try again or switch to Local project.',
-        }
-        return
-      }
-    }
-    const threadId = await sendMessageToNewThread(text, targetCwd, imageUrls, skills, mentions, fileAttachments)
+    const threadId = await sendMessageToNewThread(text, newThreadCwd.value, imageUrls, skills, mentions, fileAttachments)
     if (!threadId) return
     await router.replace({ name: 'thread', params: { threadId } })
     scheduleMobileConversationJumpToLatest()
@@ -2029,26 +1945,6 @@ async function submitFirstMessageForNewThread(
 
 .new-thread-folder-dropdown :deep(.composer-dropdown-chevron) {
   @apply h-4 w-4 sm:h-5 sm:w-5 mt-0;
-}
-
-.worktree-init-status {
-  @apply mt-3 flex w-full max-w-xl flex-col gap-1 rounded-xl border px-3 py-2 text-sm;
-}
-
-.worktree-init-status.is-running {
-  @apply border-zinc-300 bg-zinc-50 text-zinc-700;
-}
-
-.worktree-init-status.is-error {
-  @apply border-rose-300 bg-rose-50 text-rose-800;
-}
-
-.worktree-init-status-title {
-  @apply font-medium;
-}
-
-.worktree-init-status-message {
-  @apply break-all;
 }
 
 .sidebar-settings-area {
