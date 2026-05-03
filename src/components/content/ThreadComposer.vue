@@ -1232,35 +1232,47 @@ watch(
 }
 
 .thread-composer-context-bar {
-  @apply mt-2 flex min-w-0 flex-wrap items-center gap-2 px-2;
+  @apply mt-1 flex min-w-0 flex-wrap items-center gap-1.5 px-1.5;
 }
 
 .thread-composer-branch-pill {
-  @apply inline-flex h-7 min-w-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-sm text-zinc-600 shadow-sm;
+  @apply inline-flex h-5.5 min-w-0 items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 text-xs leading-none text-zinc-600 shadow-sm;
 }
 
 .thread-composer-context-icon {
-  @apply h-3.5 w-3.5 shrink-0 text-zinc-500;
+  @apply h-3 w-3 shrink-0 text-zinc-500;
 }
 
 .thread-composer-branch-control {
-  @apply min-w-0 max-w-56;
+  @apply min-w-0 max-w-48;
 }
 
 .thread-composer-branch-control :deep(.composer-dropdown-trigger) {
-  @apply h-auto max-w-48 text-zinc-600;
+  @apply h-auto max-w-40 text-xs leading-none text-zinc-600;
 }
 
 .thread-composer-branch-control :deep(.composer-dropdown-menu) {
-  @apply min-w-72 bg-zinc-950/95 text-white border-zinc-800 shadow-2xl;
+  @apply min-w-60 rounded-lg bg-zinc-950/95 p-1 text-white border-zinc-800 shadow-2xl;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-menu-wrap-up) {
+  @apply bottom-[calc(100%+5px)];
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-search-wrap) {
+  @apply px-0.5 pb-0.5;
 }
 
 .thread-composer-branch-control :deep(.composer-dropdown-search-input) {
-  @apply border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600;
+  @apply h-6 rounded border-zinc-800 bg-zinc-900 px-2 py-0 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600;
+}
+
+.thread-composer-branch-control :deep(.composer-dropdown-options) {
+  @apply max-h-44;
 }
 
 .thread-composer-branch-control :deep(.composer-dropdown-option) {
-  @apply text-zinc-100 hover:bg-zinc-800;
+  @apply rounded-md px-2 py-1 text-xs leading-4 text-zinc-100 hover:bg-zinc-800;
 }
 
 .thread-composer-branch-control :deep(.composer-dropdown-option.is-selected) {
@@ -1272,7 +1284,7 @@ watch(
 }
 
 .thread-composer-branch-status {
-  @apply min-w-0 truncate text-xs text-zinc-500;
+  @apply min-w-0 truncate text-[11px] leading-none text-zinc-500;
 }
 
 .thread-composer-attachments {
