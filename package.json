@@ -39,6 +39,8 @@
     "build:frontend": "vue-tsc --noEmit && vite build",
     "build:cli": "tsup",
     "build": "npm run build:frontend && npm run build:cli",
+    "appserver:schema:check": "node scripts/sync-app-server-schemas.mjs",
+    "appserver:schema:update": "node scripts/sync-app-server-schemas.mjs --write",
     "test": "vitest run",
     "preview": "vite preview",
     "prepublishOnly": "npm run build"
