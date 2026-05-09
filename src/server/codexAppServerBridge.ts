@@ -62,12 +62,6 @@ type ThreadSearchDocument = {
   id: string
   title: string
   preview: string
-  messageText: string
-  searchableText: string
-}
-
-type ThreadSearchIndex = {
-  docsById: Map<string, ThreadSearchDocument>
 }
 
 type SessionRecoveredFileChange = {
@@ -114,44 +108,6 @@ function setJson(res: ServerResponse, statusCode: number, payload: unknown): voi
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.end(JSON.stringify(payload))
-}
-
-function extractThreadMessageText(threadReadPayload: unknown): string {
-  const payload = asRecord(threadReadPayload)
-  const thread = asRecord(payload?.thread)
-  const turns = Array.isArray(thread?.turns) ? thread.turns : []
-  const parts: string[] = []
-
-  for (const turn of turns) {
-    const turnRecord = asRecord(turn)
-    const items = Array.isArray(turnRecord?.items) ? turnRecord.items : []
-    for (const item of items) {
-      const itemRecord = asRecord(item)
-      const type = typeof itemRecord?.type === 'string' ? itemRecord.type : ''
-      if (type === 'agentMessage' && typeof itemRecord?.text === 'string' && itemRecord.text.trim().length > 0) {
-        parts.push(itemRecord.text.trim())
-        continue
-      }
-      if (type === 'userMessage') {
-        const content = Array.isArray(itemRecord?.content) ? itemRecord.content : []
-        for (const block of content) {
-          const blockRecord = asRecord(block)
-          if (blockRecord?.type === 'text' && typeof blockRecord.text === 'string' && blockRecord.text.trim().length > 0) {
-            parts.push(blockRecord.text.trim())
-          }
-        }
-        continue
-      }
-      if (type === 'commandExecution') {
-        const command = typeof itemRecord?.command === 'string' ? itemRecord.command.trim() : ''
-        const output = typeof itemRecord?.aggregatedOutput === 'string' ? itemRecord.aggregatedOutput.trim() : ''
-        if (command) parts.push(command)
-        if (output) parts.push(output)
-      }
-    }
-  }
-
-  return parts.join('\n').trim()
 }
 
 function readNonEmptyString(value: unknown): string {
@@ -382,8 +338,7 @@ function isExactPhraseMatch(query: string, doc: ThreadSearchDocument): boolean {
   if (!q) return false
   return (
     doc.title.toLowerCase().includes(q) ||
-    doc.preview.toLowerCase().includes(q) ||
-    doc.messageText.toLowerCase().includes(q)
+    doc.preview.toLowerCase().includes(q)
   )
 }
 
@@ -1524,92 +1479,68 @@ function getSharedBridgeState(): SharedBridgeState {
   return created
 }
 
-async function loadAllThreadsForSearch(appServer: AppServerProcess): Promise<ThreadSearchDocument[]> {
-  const threads: Array<{ id: string; title: string; preview: string }> = []
+function normalizeThreadSearchDocument(value: unknown): ThreadSearchDocument | null {
+  const record = asRecord(value)
+  if (!record) return null
+
+  const id = typeof record.id === 'string' ? record.id : ''
+  if (!id) return null
+
+  const title = typeof record.name === 'string' && record.name.trim().length > 0
+    ? record.name.trim()
+    : (typeof record.preview === 'string' && record.preview.trim().length > 0 ? record.preview.trim() : 'Untitled thread')
+  const preview = typeof record.preview === 'string' ? record.preview : ''
+
+  return {
+    id,
+    title,
+    preview,
+  }
+}
+
+async function loadThreadSearchDocuments(
+  appServer: AppServerProcess,
+  options: { query?: string; limit: number; useServerSearch: boolean },
+): Promise<{ docs: ThreadSearchDocument[]; scannedCount: number }> {
+  const docs: ThreadSearchDocument[] = []
   let cursor: string | null = null
+  let scannedCount = 0
+  const pageLimit = Math.min(Math.max(options.limit, 1), 200)
 
   do {
-    const response = asRecord(await appServer.rpc('thread/list', {
+    const params: Record<string, unknown> = {
       archived: false,
-      limit: 100,
+      limit: pageLimit,
       sortKey: 'updated_at',
       cursor,
-    }))
+    }
+    if (options.useServerSearch && options.query) {
+      params.searchTerm = options.query
+      params.useStateDbOnly = true
+    }
+
+    const response = asRecord(await appServer.rpc('thread/list', params))
     const data = Array.isArray(response?.data) ? response.data : []
+    scannedCount += data.length
     for (const row of data) {
-      const record = asRecord(row)
-      const id = typeof record?.id === 'string' ? record.id : ''
-      if (!id) continue
-      const title = typeof record?.name === 'string' && record.name.trim().length > 0
-        ? record.name.trim()
-        : (typeof record?.preview === 'string' && record.preview.trim().length > 0 ? record.preview.trim() : 'Untitled thread')
-      const preview = typeof record?.preview === 'string' ? record.preview : ''
-      threads.push({ id, title, preview })
+      const doc = normalizeThreadSearchDocument(row)
+      if (!doc) continue
+      if (!options.useServerSearch && options.query && !isExactPhraseMatch(options.query, doc)) {
+        continue
+      }
+      docs.push(doc)
+      if (docs.length >= options.limit) {
+        return { docs, scannedCount }
+      }
     }
     cursor = typeof response?.nextCursor === 'string' && response.nextCursor.length > 0 ? response.nextCursor : null
   } while (cursor)
 
-  const docs: ThreadSearchDocument[] = []
-  const concurrency = 4
-  for (let offset = 0; offset < threads.length; offset += concurrency) {
-    const batch = threads.slice(offset, offset + concurrency)
-    const loaded = await Promise.all(batch.map(async (thread) => {
-      try {
-        const readResponse = await appServer.rpc('thread/read', {
-          threadId: thread.id,
-          includeTurns: true,
-        })
-        const messageText = extractThreadMessageText(readResponse)
-        const searchableText = [thread.title, thread.preview, messageText].filter(Boolean).join('\n')
-        return {
-          id: thread.id,
-          title: thread.title,
-          preview: thread.preview,
-          messageText,
-          searchableText,
-        } satisfies ThreadSearchDocument
-      } catch {
-        const searchableText = [thread.title, thread.preview].filter(Boolean).join('\n')
-        return {
-          id: thread.id,
-          title: thread.title,
-          preview: thread.preview,
-          messageText: '',
-          searchableText,
-        } satisfies ThreadSearchDocument
-      }
-    }))
-    docs.push(...loaded)
-  }
-
-  return docs
-}
-
-async function buildThreadSearchIndex(appServer: AppServerProcess): Promise<ThreadSearchIndex> {
-  const docs = await loadAllThreadsForSearch(appServer)
-  const docsById = new Map<string, ThreadSearchDocument>(docs.map((doc) => [doc.id, doc]))
-  return { docsById }
+  return { docs, scannedCount }
 }
 
 export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
   const { appServer, methodCatalog } = getSharedBridgeState()
-  let threadSearchIndex: ThreadSearchIndex | null = null
-  let threadSearchIndexPromise: Promise<ThreadSearchIndex> | null = null
-
-  async function getThreadSearchIndex(): Promise<ThreadSearchIndex> {
-    if (threadSearchIndex) return threadSearchIndex
-    if (!threadSearchIndexPromise) {
-      threadSearchIndexPromise = buildThreadSearchIndex(appServer)
-        .then((index) => {
-          threadSearchIndex = index
-          return index
-        })
-        .finally(() => {
-          threadSearchIndexPromise = null
-        })
-    }
-    return threadSearchIndexPromise
-  }
   void initializeSkillsSyncOnStartup(appServer)
 
   const middleware = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
@@ -2032,13 +1963,27 @@ export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
           return
         }
 
-        const index = await getThreadSearchIndex()
-        const matchedIds = Array.from(index.docsById.entries())
-          .filter(([, doc]) => isExactPhraseMatch(query, doc))
-          .slice(0, limit)
-          .map(([id]) => id)
+        let searchResult: { docs: ThreadSearchDocument[]; scannedCount: number }
+        try {
+          searchResult = await loadThreadSearchDocuments(appServer, {
+            query,
+            limit,
+            useServerSearch: true,
+          })
+        } catch {
+          searchResult = await loadThreadSearchDocuments(appServer, {
+            query,
+            limit,
+            useServerSearch: false,
+          })
+        }
 
-        setJson(res, 200, { data: { threadIds: matchedIds, indexedThreadCount: index.docsById.size } })
+        setJson(res, 200, {
+          data: {
+            threadIds: searchResult.docs.map((doc) => doc.id),
+            indexedThreadCount: searchResult.scannedCount,
+          },
+        })
         return
       }
 

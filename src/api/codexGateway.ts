@@ -397,12 +397,23 @@ function normalizeReasoningEffort(value: unknown): ReasoningEffort | '' {
 }
 
 async function getThreadGroupsV2(): Promise<UiProjectGroup[]> {
-  const payload = await callRpc<ThreadListResponse>('thread/list', {
-    archived: false,
-    limit: 100,
-    sortKey: 'updated_at',
-  })
-  return normalizeThreadGroupsV2(payload)
+  const data: ThreadListResponse['data'] = []
+  let cursor: string | null = null
+  let pageCount = 0
+
+  do {
+    const payload = await callRpc<ThreadListResponse>('thread/list', {
+      archived: false,
+      limit: 200,
+      sortKey: 'updated_at',
+      cursor,
+    })
+    data.push(...(Array.isArray(payload.data) ? payload.data : []))
+    cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
+    pageCount += 1
+  } while (cursor && pageCount < 100)
+
+  return normalizeThreadGroupsV2({ data, nextCursor: null, backwardsCursor: null })
 }
 
 async function getThreadMessagesV2(threadId: string): Promise<UiMessage[]> {
