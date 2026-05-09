@@ -9,6 +9,7 @@
         <span class="plugins-hub-capability" :class="{ 'is-enabled': pluginMethodsAvailable }">Plugins</span>
         <span class="plugins-hub-capability" :class="{ 'is-enabled': appMethodsAvailable }">Apps</span>
         <span class="plugins-hub-capability" :class="{ 'is-enabled': mcpMethodsAvailable }">MCP</span>
+        <span class="plugins-hub-capability" :class="{ 'is-enabled': hookMethodsAvailable }">Hooks</span>
       </div>
     </div>
 
@@ -167,7 +168,7 @@
       </template>
     </div>
 
-    <div v-else class="plugins-hub-pane">
+    <div v-else-if="activeTab === 'mcp'" class="plugins-hub-pane">
       <div v-if="!mcpMethodsAvailable" class="plugins-hub-empty">The connected Codex runtime does not expose MCP status methods.</div>
       <section v-else class="plugins-hub-section">
         <div class="plugins-hub-section-title">Configured MCP Servers ({{ filteredMcpServers.length }})</div>
@@ -200,6 +201,73 @@
       </section>
     </div>
 
+    <div v-else class="plugins-hub-pane">
+      <div v-if="!hookMethodsAvailable" class="plugins-hub-empty">The connected Codex runtime does not expose hooks/list.</div>
+      <template v-else>
+        <section v-if="recentHookRuns.length > 0" class="plugins-hub-section">
+          <div class="plugins-hub-section-title">Recent Hook Runs ({{ recentHookRuns.length }})</div>
+          <div class="plugins-hub-list">
+            <article v-for="run in recentHookRuns" :key="run.id" class="plugins-hub-list-card">
+              <div class="plugins-hub-list-main">
+                <div class="plugins-hub-card-title-row">
+                  <span class="plugins-hub-card-title">{{ formatHookEvent(run.eventName) }}</span>
+                  <span class="plugins-hub-card-badge-muted">{{ formatHookStatus(run.status) }}</span>
+                  <span class="plugins-hub-card-badge-muted">{{ run.executionMode || 'mode' }}</span>
+                </div>
+                <p class="plugins-hub-list-meta">
+                  {{ run.handlerType || 'hook' }} · {{ shortHookPath(run.sourcePath) }}<span v-if="run.durationMs !== null"> · {{ run.durationMs }}ms</span>
+                </p>
+                <p v-if="run.statusMessage" class="plugins-hub-card-description">{{ run.statusMessage }}</p>
+                <div v-if="run.entries.length > 0" class="plugins-hub-chip-row">
+                  <span v-for="entry in run.entries.slice(0, 4)" :key="`${run.id}:${entry.kind}:${entry.text}`" class="plugins-hub-chip">
+                    {{ entry.kind }}: {{ entry.text }}
+                  </span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="plugins-hub-section">
+          <div class="plugins-hub-section-title">Configured Hooks ({{ filteredHookCount }})</div>
+          <div v-if="hooksLoading" class="plugins-hub-loading">Loading hooks…</div>
+          <div v-else-if="filteredHookEntries.length === 0" class="plugins-hub-empty">No hooks match the current search.</div>
+          <div v-else class="plugins-hub-list">
+            <article v-for="entry in filteredHookEntries" :key="entry.cwd" class="plugins-hub-list-card plugins-hub-list-card-block">
+              <div class="plugins-hub-list-main">
+                <div class="plugins-hub-card-title-row">
+                  <span class="plugins-hub-card-title">{{ shortHookPath(entry.cwd) }}</span>
+                  <span class="plugins-hub-card-badge-muted">{{ entry.hooks.length }} hooks</span>
+                </div>
+                <p v-for="warning in entry.warnings" :key="`warning:${warning}`" class="plugins-hub-list-meta">{{ warning }}</p>
+                <p v-for="error in entry.errors" :key="`error:${error.path}:${error.message}`" class="plugins-hub-list-meta plugins-hub-list-meta-error">
+                  {{ error.path ? `${shortHookPath(error.path)}: ` : '' }}{{ error.message }}
+                </p>
+                <div class="plugins-hub-hook-list">
+                  <article v-for="hook in entry.hooks" :key="hook.key" class="plugins-hub-hook-row">
+                    <div class="plugins-hub-hook-main">
+                      <div class="plugins-hub-card-title-row">
+                        <span class="plugins-hub-card-title">{{ formatHookEvent(hook.eventName) }}</span>
+                        <span class="plugins-hub-card-badge-muted">{{ hook.handlerType }}</span>
+                        <span class="plugins-hub-card-badge-muted">{{ hook.source }}</span>
+                        <span class="plugins-hub-card-badge-muted">{{ hook.trustStatus }}</span>
+                        <span v-if="!hook.enabled" class="plugins-hub-card-badge-muted">Disabled</span>
+                      </div>
+                      <p class="plugins-hub-list-meta">
+                        {{ shortHookPath(hook.sourcePath) }}<span v-if="hook.matcher"> · {{ hook.matcher }}</span><span v-if="hook.timeoutSec !== null"> · {{ hook.timeoutSec }}s</span>
+                      </p>
+                      <p v-if="hook.command" class="plugins-hub-hook-command">{{ hook.command }}</p>
+                      <p v-if="hook.statusMessage" class="plugins-hub-list-meta">{{ hook.statusMessage }}</p>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </template>
+    </div>
+
     <PluginDetailModal
       :visible="detailVisible"
       :plugin="detailPlugin"
@@ -224,9 +292,11 @@ import {
   getMethodCatalog,
   installPlugin,
   listApps,
+  listHooks,
   listMcpServers,
   listPlugins,
   normalizeAppListNotification,
+  normalizeHookRunNotification,
   readPluginDetail,
   reloadMcpServers,
   startMcpOauthLogin,
@@ -234,6 +304,8 @@ import {
   uninstallPlugin,
   type RpcNotification,
   type UiAppInfo,
+  type UiHookListEntry,
+  type UiHookRun,
   type UiMcpServerStatus,
   type UiPluginApp,
   type UiPluginDetail,
@@ -271,6 +343,7 @@ const tabs = [
   { value: 'plugins', label: 'Plugins' },
   { value: 'apps', label: 'Apps' },
   { value: 'mcp', label: 'MCP' },
+  { value: 'hooks', label: 'Hooks' },
 ] as const
 
 const activeTab = ref<(typeof tabs)[number]['value']>('plugins')
@@ -280,11 +353,14 @@ const methods = ref<string[]>([])
 const pluginsLoading = ref(false)
 const appsLoading = ref(false)
 const mcpLoading = ref(false)
+const hooksLoading = ref(false)
 const isRefreshing = ref(false)
 const mcpReloading = ref(false)
 const marketplaces = ref<UiPluginMarketplace[]>([])
 const apps = ref<UiAppInfo[]>([])
 const mcpServers = ref<UiMcpServerStatus[]>([])
+const hookEntries = ref<UiHookListEntry[]>([])
+const recentHookRuns = ref<UiHookRun[]>([])
 const toast = ref<{ text: string; type: 'success' | 'error' } | null>(null)
 const detailVisible = ref(false)
 const detailPlugin = ref<UiPluginSummary>(EMPTY_PLUGIN)
@@ -299,6 +375,7 @@ let stopNotifications: (() => void) | null = null
 const pluginMethodsAvailable = computed(() => methods.value.includes('plugin/list') && methods.value.includes('plugin/read'))
 const appMethodsAvailable = computed(() => methods.value.includes('app/list'))
 const mcpMethodsAvailable = computed(() => methods.value.includes('mcpServerStatus/list'))
+const hookMethodsAvailable = computed(() => methods.value.includes('hooks/list'))
 const plugins = computed(() => marketplaces.value.flatMap((marketplace) => marketplace.plugins))
 
 const pluginQuery = computed(() => query.value.trim().toLowerCase())
@@ -316,6 +393,20 @@ const filteredAvailableApps = computed(() =>
 )
 const filteredMcpServers = computed(() =>
   mcpServers.value.filter((server) => matchesMcp(server, pluginQuery.value)),
+)
+const filteredHookEntries = computed(() => {
+  const q = pluginQuery.value
+  return hookEntries.value.flatMap((entry) => {
+    const hooks = entry.hooks.filter((hook) => matchesHook(entry.cwd, hook, q))
+    const matchesEntry = !q || entry.cwd.toLowerCase().includes(q)
+    if (matchesEntry || hooks.length > 0 || entry.warnings.some((warning) => warning.toLowerCase().includes(q)) || entry.errors.some((error) => `${error.path} ${error.message}`.toLowerCase().includes(q))) {
+      return [{ ...entry, hooks: matchesEntry ? entry.hooks : hooks }]
+    }
+    return []
+  })
+})
+const filteredHookCount = computed(() =>
+  filteredHookEntries.value.reduce((count, entry) => count + entry.hooks.length, 0),
 )
 
 function showToast(text: string, type: 'success' | 'error' = 'success'): void {
@@ -356,6 +447,23 @@ function matchesMcp(server: UiMcpServerStatus, q: string): boolean {
   return server.tools.some((tool) =>
     tool.name.toLowerCase().includes(q) || tool.description.toLowerCase().includes(q),
   )
+}
+
+function matchesHook(cwd: string, hook: UiHookListEntry['hooks'][number], q: string): boolean {
+  if (!q) return true
+  return [
+    cwd,
+    hook.key,
+    hook.eventName,
+    hook.handlerType,
+    hook.matcher,
+    hook.command,
+    hook.sourcePath,
+    hook.source,
+    hook.pluginId,
+    hook.trustStatus,
+    hook.statusMessage,
+  ].some((value) => value.toLowerCase().includes(q))
 }
 
 function cardAvatarStyle(plugin: UiPluginSummary): Record<string, string> | undefined {
@@ -426,6 +534,16 @@ async function fetchMcp(): Promise<void> {
   }
 }
 
+async function fetchHooks(): Promise<void> {
+  if (!hookMethodsAvailable.value) return
+  hooksLoading.value = true
+  try {
+    hookEntries.value = await listHooks()
+  } finally {
+    hooksLoading.value = false
+  }
+}
+
 async function refreshActiveTab(force = false): Promise<void> {
   isRefreshing.value = true
   try {
@@ -433,8 +551,10 @@ async function refreshActiveTab(force = false): Promise<void> {
       await fetchPlugins(force)
     } else if (activeTab.value === 'apps') {
       await fetchApps(force)
-    } else {
+    } else if (activeTab.value === 'mcp') {
       await fetchMcp()
+    } else {
+      await fetchHooks()
     }
   } finally {
     isRefreshing.value = false
@@ -545,6 +665,31 @@ function formatAuthStatus(value: string): string {
   return 'Unsupported'
 }
 
+function formatHookEvent(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (segment) => segment.toUpperCase())
+}
+
+function formatHookStatus(value: string): string {
+  if (!value) return 'Unknown'
+  return formatHookEvent(value)
+}
+
+function shortHookPath(value: string): string {
+  const normalized = value.trim()
+  if (!normalized) return ''
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length <= 3) return normalized
+  return `…/${parts.slice(-3).join('/')}`
+}
+
+function upsertHookRun(run: UiHookRun): void {
+  const next = [run, ...recentHookRuns.value.filter((entry) => entry.id !== run.id)]
+  recentHookRuns.value = next.slice(0, 12)
+}
+
 function handleNotification(notification: RpcNotification): void {
   if (notification.method === 'app/list/updated') {
     const nextApps = normalizeAppListNotification(notification.params)
@@ -559,12 +704,20 @@ function handleNotification(notification: RpcNotification): void {
       showToast(params.error, 'error')
     }
     void fetchMcp()
+    return
+  }
+  if (notification.method === 'hook/started' || notification.method === 'hook/completed') {
+    const run = normalizeHookRunNotification(notification.params)
+    if (run) upsertHookRun(run)
+    if (notification.method === 'hook/completed') {
+      void fetchHooks()
+    }
   }
 }
 
 onMounted(async () => {
   await loadCapabilities()
-  await Promise.all([fetchPlugins(), fetchApps(), fetchMcp()])
+  await Promise.all([fetchPlugins(), fetchApps(), fetchMcp(), fetchHooks()])
   stopNotifications = subscribeCodexNotifications(handleNotification)
 })
 
@@ -730,12 +883,36 @@ onBeforeUnmount(() => {
   @apply flex flex-col gap-3 rounded-3xl border border-zinc-200 bg-white p-4 lg:flex-row lg:items-center lg:justify-between;
 }
 
+.plugins-hub-list-card-block {
+  @apply lg:items-stretch;
+}
+
 .plugins-hub-list-main {
   @apply min-w-0;
 }
 
 .plugins-hub-list-meta {
   @apply m-1.5 mb-0 text-sm text-zinc-500;
+}
+
+.plugins-hub-list-meta-error {
+  @apply text-rose-600;
+}
+
+.plugins-hub-hook-list {
+  @apply mt-3 flex flex-col gap-2;
+}
+
+.plugins-hub-hook-row {
+  @apply rounded-2xl border border-zinc-100 bg-zinc-50 p-3;
+}
+
+.plugins-hub-hook-main {
+  @apply min-w-0;
+}
+
+.plugins-hub-hook-command {
+  @apply mt-2 max-w-full overflow-x-auto rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-700;
 }
 
 .plugins-hub-loading,

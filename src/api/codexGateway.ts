@@ -402,12 +402,13 @@ async function getThreadGroupsV2(): Promise<UiProjectGroup[]> {
   let pageCount = 0
 
   do {
-    const payload = await callRpc<ThreadListResponse>('thread/list', {
+    const params: Record<string, unknown> = {
       archived: false,
       limit: 200,
       sortKey: 'updated_at',
       cursor,
-    })
+    }
+    const payload: ThreadListResponse = await callRpc<ThreadListResponse>('thread/list', params)
     data.push(...(Array.isArray(payload.data) ? payload.data : []))
     cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
     pageCount += 1
@@ -1995,6 +1996,47 @@ export type UiMcpServerStatus = {
   resourceTemplateCount: number
 }
 
+export type UiHookMetadata = {
+  key: string
+  eventName: string
+  handlerType: string
+  matcher: string
+  command: string
+  timeoutSec: number | null
+  statusMessage: string
+  sourcePath: string
+  source: string
+  pluginId: string
+  enabled: boolean
+  isManaged: boolean
+  trustStatus: string
+}
+
+export type UiHookListEntry = {
+  cwd: string
+  hooks: UiHookMetadata[]
+  warnings: string[]
+  errors: Array<{ path: string; message: string }>
+}
+
+export type UiHookRun = {
+  id: string
+  threadId: string
+  turnId: string
+  eventName: string
+  handlerType: string
+  executionMode: string
+  scope: string
+  sourcePath: string
+  source: string
+  status: string
+  statusMessage: string
+  startedAt: number | null
+  completedAt: number | null
+  durationMs: number | null
+  entries: Array<{ kind: string; text: string }>
+}
+
 type SkillsListResponseEntry = {
   cwd: string
   skills: Array<{
@@ -2237,6 +2279,111 @@ export async function listMcpServers(limit = 100): Promise<UiMcpServerStatus[]> 
     })
   } catch {
     return []
+  }
+}
+
+function readNumericLike(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'bigint') return Number(value)
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function normalizeHookMetadata(value: unknown): UiHookMetadata | null {
+  const record = asRecord(value)
+  if (!record) return null
+  const key = readString(record.key)
+  if (!key) return null
+  return {
+    key,
+    eventName: readString(record.eventName) ?? '',
+    handlerType: readString(record.handlerType) ?? '',
+    matcher: readString(record.matcher) ?? '',
+    command: readString(record.command) ?? '',
+    timeoutSec: readNumericLike(record.timeoutSec),
+    statusMessage: readString(record.statusMessage) ?? '',
+    sourcePath: readString(record.sourcePath) ?? '',
+    source: readString(record.source) ?? '',
+    pluginId: readString(record.pluginId) ?? '',
+    enabled: readBoolean(record.enabled) ?? false,
+    isManaged: readBoolean(record.isManaged) ?? false,
+    trustStatus: readString(record.trustStatus) ?? '',
+  }
+}
+
+function normalizeHookListEntry(value: unknown): UiHookListEntry | null {
+  const record = asRecord(value)
+  if (!record) return null
+  const cwd = readString(record.cwd)
+  if (!cwd) return null
+  return {
+    cwd,
+    hooks: (Array.isArray(record.hooks) ? record.hooks : [])
+      .map((hook) => normalizeHookMetadata(hook))
+      .filter((hook): hook is UiHookMetadata => hook !== null),
+    warnings: readStringArray(record.warnings),
+    errors: (Array.isArray(record.errors) ? record.errors : []).flatMap((error) => {
+      const errorRecord = asRecord(error)
+      const path = readString(errorRecord?.path)
+      const message = readString(errorRecord?.message)
+      return path || message ? [{ path: path ?? '', message: message ?? '' }] : []
+    }),
+  }
+}
+
+export async function listHooks(cwds?: string[]): Promise<UiHookListEntry[]> {
+  try {
+    const params: Record<string, unknown> = {}
+    if (cwds && cwds.length > 0) params.cwds = cwds
+    const payload = await callRpc<unknown>('hooks/list', params)
+    const record = asRecord(payload)
+    return (Array.isArray(record?.data) ? record.data : [])
+      .map((entry) => normalizeHookListEntry(entry))
+      .filter((entry): entry is UiHookListEntry => entry !== null)
+  } catch {
+    return []
+  }
+}
+
+function normalizeHookRun(value: unknown): Omit<UiHookRun, 'threadId' | 'turnId'> | null {
+  const record = asRecord(value)
+  if (!record) return null
+  const id = readString(record.id)
+  if (!id) return null
+  const entries = (Array.isArray(record.entries) ? record.entries : []).flatMap((entry) => {
+    const entryRecord = asRecord(entry)
+    const kind = readString(entryRecord?.kind)
+    const text = readString(entryRecord?.text)
+    return kind || text ? [{ kind: kind ?? '', text: text ?? '' }] : []
+  })
+  return {
+    id,
+    eventName: readString(record.eventName) ?? '',
+    handlerType: readString(record.handlerType) ?? '',
+    executionMode: readString(record.executionMode) ?? '',
+    scope: readString(record.scope) ?? '',
+    sourcePath: readString(record.sourcePath) ?? '',
+    source: readString(record.source) ?? '',
+    status: readString(record.status) ?? '',
+    statusMessage: readString(record.statusMessage) ?? '',
+    startedAt: readNumericLike(record.startedAt),
+    completedAt: readNumericLike(record.completedAt),
+    durationMs: readNumericLike(record.durationMs),
+    entries,
+  }
+}
+
+export function normalizeHookRunNotification(payload: unknown): UiHookRun | null {
+  const record = asRecord(payload)
+  const run = normalizeHookRun(record?.run)
+  if (!record || !run) return null
+  return {
+    ...run,
+    threadId: readString(record.threadId) ?? '',
+    turnId: readString(record.turnId) ?? '',
   }
 }
 

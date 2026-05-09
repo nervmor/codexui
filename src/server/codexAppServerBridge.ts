@@ -2040,7 +2040,6 @@ export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
   }
 
   middleware.dispose = () => {
-    threadSearchIndex = null
     appServer.dispose()
   }
   middleware.subscribeNotifications = (
