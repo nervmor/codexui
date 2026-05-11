@@ -2,46 +2,28 @@
   <div class="skills-hub">
     <div class="skills-hub-header">
       <h2 class="skills-hub-title">Skills</h2>
-      <p class="skills-hub-subtitle">Manage installed skills across global and project scopes, and discover more from the OpenClaw community.</p>
-    </div>
-
-    <div class="skills-sync-panel">
-      <div class="skills-sync-header">
-        <strong>Skills Sync (GitHub)</strong>
-        <span v-if="syncStatus.configured" class="skills-sync-badge">Connected: {{ syncStatus.repoOwner }}/{{ syncStatus.repoName }}</span>
-        <span v-else-if="syncStatus.loggedIn" class="skills-sync-badge">Logged in as {{ syncStatus.githubUsername }}</span>
-        <span v-else class="skills-sync-badge">Not connected</span>
-      </div>
-      <div class="skills-sync-meta">
-        <span>Startup: {{ syncStatus.startup.mode }}</span>
-        <span>Branch: {{ syncStatus.startup.branch }}</span>
-        <span>Action: {{ syncStatus.startup.lastAction }}</span>
-      </div>
-      <div v-if="syncStatus.startup.lastError" class="skills-sync-error">
-        {{ syncStatus.startup.lastError }}
-      </div>
-      <div v-if="syncActionStatus" class="skills-sync-meta">
-        <span>Manual sync: {{ syncActionStatus }}</span>
-      </div>
-      <div v-if="syncActionError" class="skills-sync-error">
-        {{ syncActionError }}
-      </div>
-      <div v-if="deviceLogin" class="skills-sync-device">
-        <span>Open <a :href="deviceLogin.verification_uri" target="_blank" rel="noreferrer">GitHub device login</a> and enter code:</span>
-        <code>{{ deviceLogin.user_code }}</code>
-      </div>
-      <div class="skills-sync-actions">
-        <button v-if="!syncStatus.loggedIn" class="skills-hub-sort" type="button" @click="startGithubFirebaseLogin">Login with GitHub</button>
-        <button v-if="!syncStatus.loggedIn" class="skills-hub-sort" type="button" @click="startGithubLogin">Device Login</button>
-        <button v-if="syncStatus.loggedIn" class="skills-hub-sort" type="button" @click="logoutGithub" :disabled="isSyncActionInFlight">Logout GitHub</button>
-        <button class="skills-hub-sort" type="button" @click="pullSkillsSync" :disabled="isSyncActionInFlight">{{ isPullInFlight ? 'Pulling...' : 'Pull' }}</button>
-        <button v-if="syncStatus.loggedIn" class="skills-hub-sort" type="button" @click="pushSkillsSync" :disabled="!syncStatus.configured || isSyncActionInFlight">{{ isPushInFlight ? 'Pushing...' : 'Push' }}</button>
-      </div>
+      <p class="skills-hub-subtitle">Manage locally installed skills across global and project scopes.</p>
     </div>
 
     <div v-if="toast" class="skills-hub-toast" :class="toastClass">{{ toast.text }}</div>
 
-    <div v-if="filteredInstalled.length > 0" class="skills-hub-section">
+    <div class="skills-hub-toolbar">
+      <div class="skills-hub-search-wrap">
+        <IconTablerSearch class="skills-hub-search-icon" />
+        <input
+          ref="searchRef"
+          v-model="query"
+          class="skills-hub-search"
+          type="text"
+          placeholder="Search local skills..."
+        />
+        <span class="skills-hub-count">{{ filteredInstalled.length }} skills</span>
+      </div>
+    </div>
+
+    <div v-if="isLoading" class="skills-hub-loading">Loading skills...</div>
+    <div v-else-if="error" class="skills-hub-error">{{ error }}</div>
+    <div v-else-if="filteredInstalled.length > 0" class="skills-hub-section">
       <div class="skills-hub-section-heading">
         <span class="skills-hub-section-title">Installed ({{ filteredInstalled.length }})</span>
       </div>
@@ -75,69 +57,14 @@
         </div>
       </div>
     </div>
-
-    <div class="skills-hub-toolbar">
-      <div class="skills-hub-search-wrap">
-        <IconTablerSearch class="skills-hub-search-icon" />
-        <input
-          ref="searchRef"
-          v-model="query"
-          class="skills-hub-search"
-          type="text"
-          placeholder="Search skills... (e.g. flight, docker, react)"
-          @input="onSearchInput"
-        />
-        <span v-if="totalCount > 0" class="skills-hub-count">{{ totalCount }} skills</span>
-      </div>
-      <button class="skills-hub-sort" type="button" @click="toggleSort">
-        {{ sortLabel }}
-      </button>
-    </div>
-
-    <div class="skills-hub-section">
-      <div v-if="isLoading" class="skills-hub-loading">Loading skills...</div>
-      <div v-else-if="error" class="skills-hub-error">{{ error }}</div>
-      <template v-else>
-        <div v-if="browseSkills.length > 0" class="skills-hub-category-list">
-          <div
-            v-for="group in browseSkillGroups"
-            :key="`browse-${group.key}`"
-            class="skills-hub-category"
-          >
-            <button
-              class="skills-hub-category-toggle"
-              type="button"
-              :aria-expanded="isSkillGroupOpen('browse', group.key)"
-              @click="toggleSkillGroup('browse', group.key)"
-            >
-              <IconTablerChevronRight
-                class="skills-hub-section-chevron"
-                :class="{ 'is-open': isSkillGroupOpen('browse', group.key) }"
-              />
-              <span class="skills-hub-category-title">{{ group.label }}</span>
-              <span class="skills-hub-category-count">{{ group.skills.length }}</span>
-            </button>
-            <div v-if="isSkillGroupOpen('browse', group.key)" class="skills-hub-grid">
-              <SkillCard
-                v-for="skill in group.skills"
-                :key="skill.url || `${skill.owner}/${skill.name}`"
-                :skill="skill"
-                @select="(skill) => openDetail(skill as HubSkill)"
-              />
-            </div>
-          </div>
-        </div>
-        <div v-else-if="query.trim()" class="skills-hub-empty">No skills found for "{{ query }}"</div>
-      </template>
-    </div>
+    <div v-else-if="query.trim()" class="skills-hub-empty">No local skills found for "{{ query }}"</div>
+    <div v-else class="skills-hub-empty">No local skills installed</div>
 
     <SkillDetailModal
       :skill="detailSkill"
       :visible="isDetailOpen"
-      :is-installing="isDetailInstalling"
       :is-uninstalling="isDetailUninstalling"
       @close="isDetailOpen = false"
-      @install="handleInstall"
       @uninstall="handleUninstall"
       @toggle-enabled="handleToggleEnabled"
     />
@@ -150,19 +77,14 @@ import IconTablerSearch from '../icons/IconTablerSearch.vue'
 import IconTablerChevronRight from '../icons/IconTablerChevronRight.vue'
 import SkillCard from './SkillCard.vue'
 import SkillDetailModal, { type HubSkill } from './SkillDetailModal.vue'
-import { useGithubSkillsSync } from '../../composables/useGithubSkillsSync'
 import { groupSkillsByNamePrefix } from '../../utils/skillsGrouping'
 
-const EMPTY_SKILL: HubSkill = { name: '', owner: '', description: '', url: '', installed: false }
-const SKILLS_HUB_CACHE_KEY = 'codex-web-local.skills-hub.cache.v1'
-type SkillsHubPayload = { data: HubSkill[]; installed?: HubSkill[]; total: number }
+const EMPTY_SKILL: HubSkill = { name: '', owner: '', description: '', url: '', installed: true }
+type SkillsHubPayload = { installed?: HubSkill[]; total: number }
 
 const searchRef = ref<HTMLInputElement | null>(null)
 const query = ref('')
-const sortMode = ref<'date' | 'name'>('date')
-const browseSkills = ref<HubSkill[]>([])
 const installedSkills = ref<HubSkill[]>([])
-const totalCount = ref(0)
 const isLoading = ref(false)
 const error = ref('')
 const openSkillGroupKeys = ref(new Set<string>())
@@ -170,21 +92,15 @@ const isDetailOpen = ref(false)
 const detailSkill = ref<HubSkill>(EMPTY_SKILL)
 const toast = ref<{ text: string; type: 'success' | 'error' } | null>(null)
 const actionSkillKey = ref('')
-const isInstallActionInFlight = ref(false)
 const isUninstallActionInFlight = ref(false)
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 const emit = defineEmits<{
   'skills-changed': []
 }>()
 
-const sortLabel = computed(() => sortMode.value === 'date' ? 'Newest' : 'A-Z')
 const toastClass = computed(() => toast.value?.type === 'error' ? 'skills-hub-toast-error' : 'skills-hub-toast-success')
 const currentDetailSkillKey = computed(() => `${detailSkill.value.owner}/${detailSkill.value.name}`)
-const isDetailInstalling = computed(() =>
-  isInstallActionInFlight.value && actionSkillKey.value === currentDetailSkillKey.value,
-)
 const isDetailUninstalling = computed(() =>
   isUninstallActionInFlight.value && actionSkillKey.value === currentDetailSkillKey.value,
 )
@@ -194,22 +110,22 @@ const filteredInstalled = computed(() => {
   return installedSkills.value.filter((s) =>
     s.name.toLowerCase().includes(q) ||
     s.owner.toLowerCase().includes(q) ||
-    (s.displayName ?? '').toLowerCase().includes(q),
+    (s.displayName ?? '').toLowerCase().includes(q) ||
+    (s.description ?? '').toLowerCase().includes(q),
   )
 })
 const installedSkillGroups = computed(() => groupSkillsByNamePrefix(filteredInstalled.value))
-const browseSkillGroups = computed(() => groupSkillsByNamePrefix(browseSkills.value))
 
-function skillGroupStateKey(section: 'installed' | 'browse', groupKey: string): string {
+function skillGroupStateKey(section: 'installed', groupKey: string): string {
   return `${section}:${groupKey}`
 }
 
-function isSkillGroupOpen(section: 'installed' | 'browse', groupKey: string): boolean {
+function isSkillGroupOpen(section: 'installed', groupKey: string): boolean {
   if (query.value.trim()) return true
   return openSkillGroupKeys.value.has(skillGroupStateKey(section, groupKey))
 }
 
-function toggleSkillGroup(section: 'installed' | 'browse', groupKey: string): void {
+function toggleSkillGroup(section: 'installed', groupKey: string): void {
   const stateKey = skillGroupStateKey(section, groupKey)
   const next = new Set(openSkillGroupKeys.value)
   if (next.has(stateKey)) {
@@ -226,83 +142,18 @@ function showToast(text: string, type: 'success' | 'error' = 'success'): void {
   toastTimer = setTimeout(() => { toast.value = null }, 3000)
 }
 
-function toggleSort(): void {
-  sortMode.value = sortMode.value === 'date' ? 'name' : 'date'
-  void fetchSkills(query.value)
-}
-
-function cacheKey(q: string): string {
-  return `${sortMode.value}::${q.trim().toLowerCase()}`
-}
-
-function readCache(key: string): SkillsHubPayload | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(SKILLS_HUB_CACHE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { byKey?: Record<string, SkillsHubPayload> }
-    return parsed.byKey?.[key] ?? null
-  } catch {
-    return null
-  }
-}
-
-function writeCache(key: string, payload: SkillsHubPayload): void {
-  if (typeof window === 'undefined') return
-  try {
-    const raw = window.localStorage.getItem(SKILLS_HUB_CACHE_KEY)
-    const parsed = raw ? (JSON.parse(raw) as { byKey?: Record<string, SkillsHubPayload> }) : {}
-    const byKey = parsed.byKey ?? {}
-    byKey[key] = payload
-    window.localStorage.setItem(SKILLS_HUB_CACHE_KEY, JSON.stringify({ byKey }))
-  } catch {
-    // best-effort cache
-  }
-}
-
-function clearCache(): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.removeItem(SKILLS_HUB_CACHE_KEY)
-  } catch {
-    // best-effort cache cleanup
-  }
-}
-
 function applySkillsPayload(payload: SkillsHubPayload): void {
-  const inst = payload.installed ?? []
-  installedSkills.value = inst
-  const installedNames = new Set(inst.map((s) => s.name))
-  browseSkills.value = payload.data
-    .map((s) => {
-      if (s.installed || installedNames.has(s.name)) {
-        const local = inst.find((i) => i.name === s.name)
-        return { ...s, installed: true, path: local?.path ?? s.path, enabled: local?.enabled ?? s.enabled }
-      }
-      return s
-    })
-    .filter((s) => !s.installed)
-  totalCount.value = payload.total
+  installedSkills.value = payload.installed ?? []
 }
 
-async function fetchSkills(q: string): Promise<void> {
-  const key = cacheKey(q)
-  const cached = readCache(key)
-  if (cached) {
-    applySkillsPayload(cached)
-  }
-  isLoading.value = !cached
+async function fetchSkills(): Promise<void> {
+  isLoading.value = true
   error.value = ''
   try {
-    const params = new URLSearchParams()
-    if (q.trim()) params.set('q', q.trim())
-    params.set('limit', '100')
-    params.set('sort', sortMode.value)
-    const resp = await fetch(`/codex-api/skills-hub?${params}`)
+    const resp = await fetch('/codex-api/skills-hub')
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const data = (await resp.json()) as SkillsHubPayload
     applySkillsPayload(data)
-    writeCache(key, data)
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load skills'
   } finally {
@@ -310,40 +161,9 @@ async function fetchSkills(q: string): Promise<void> {
   }
 }
 
-function onSearchInput(): void {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => fetchSkills(query.value), 300)
-}
-
 function openDetail(skill: HubSkill): void {
   detailSkill.value = skill
   isDetailOpen.value = true
-}
-
-async function handleInstall(skill: HubSkill): Promise<void> {
-  actionSkillKey.value = `${skill.owner}/${skill.name}`
-  isInstallActionInFlight.value = true
-  try {
-    const resp = await fetch('/codex-api/skills-hub/install', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: skill.owner, name: skill.name }),
-    })
-    const data = (await resp.json()) as { ok?: boolean; error?: string; path?: string }
-    if (!data.ok) throw new Error(data.error || 'Install failed')
-    const installed = { ...skill, installed: true, path: data.path, enabled: true }
-    installedSkills.value = [...installedSkills.value, installed]
-    browseSkills.value = browseSkills.value.filter((s) => s.name !== skill.name)
-    detailSkill.value = installed
-    showToast(`${skill.displayName || skill.name} skill installed`)
-    isDetailOpen.value = false
-    clearCache()
-    emit('skills-changed')
-  } catch (e) {
-    showToast(e instanceof Error ? e.message : 'Failed to install skill', 'error')
-  } finally {
-    isInstallActionInFlight.value = false
-  }
 }
 
 async function handleUninstall(skill: HubSkill): Promise<void> {
@@ -358,12 +178,8 @@ async function handleUninstall(skill: HubSkill): Promise<void> {
     const data = (await resp.json()) as { ok?: boolean; error?: string }
     if (!data.ok) throw new Error(data.error || 'Uninstall failed')
     installedSkills.value = installedSkills.value.filter((s) => s.name !== skill.name)
-    if (skill.owner !== 'local') {
-      browseSkills.value = [...browseSkills.value, { ...skill, installed: false, path: undefined, enabled: undefined }]
-    }
     showToast(`${skill.displayName || skill.name} skill uninstalled`)
     isDetailOpen.value = false
-    clearCache()
     emit('skills-changed')
   } catch (e) {
     showToast(e instanceof Error ? e.message : 'Failed to uninstall skill', 'error')
@@ -380,39 +196,15 @@ async function handleToggleEnabled(skill: HubSkill, enabled: boolean): Promise<v
       body: JSON.stringify({ method: 'skills/config/write', params: { path: skill.path, enabled } }),
     })
     if (!resp.ok) throw new Error('Failed to update skill')
-    await fetch('/codex-api/skills-sync/push', { method: 'POST' })
     showToast(`${skill.displayName || skill.name} skill ${enabled ? 'enabled' : 'disabled'}`)
-    await fetchSkills(query.value)
+    await fetchSkills()
   } catch (e) {
     showToast(e instanceof Error ? e.message : 'Failed to update skill', 'error')
   }
 }
 
-const {
-  deviceLogin,
-  isPullInFlight,
-  isPushInFlight,
-  isSyncActionInFlight,
-  loadSyncStatus,
-  logoutGithub,
-  pullSkillsSync,
-  pushSkillsSync,
-  startGithubFirebaseLogin,
-  startGithubLogin,
-  syncActionError,
-  syncActionStatus,
-  syncStatus,
-} = useGithubSkillsSync({
-  showToast,
-  onPulled: async () => {
-    await fetchSkills(query.value)
-    emit('skills-changed')
-  },
-})
-
 onMounted(() => {
-  void fetchSkills('')
-  void loadSyncStatus()
+  void fetchSkills()
 })
 </script>
 
@@ -453,38 +245,6 @@ onMounted(() => {
 
 .skills-hub-count {
   @apply text-xs text-zinc-400 whitespace-nowrap;
-}
-
-.skills-hub-sort {
-  @apply shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:border-zinc-300 cursor-pointer;
-}
-
-.skills-sync-panel {
-  @apply rounded-xl border border-zinc-200 bg-zinc-50 p-3 flex flex-col gap-2;
-}
-
-.skills-sync-header {
-  @apply flex flex-wrap items-center gap-2 text-sm text-zinc-700;
-}
-
-.skills-sync-badge {
-  @apply text-xs rounded-md border border-zinc-300 bg-white px-2 py-0.5;
-}
-
-.skills-sync-device {
-  @apply text-xs text-zinc-600 flex items-center gap-2 flex-wrap;
-}
-
-.skills-sync-meta {
-  @apply text-xs text-zinc-600 flex items-center gap-3 flex-wrap;
-}
-
-.skills-sync-error {
-  @apply text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-2 py-1;
-}
-
-.skills-sync-actions {
-  @apply flex flex-wrap gap-2;
 }
 
 .skills-hub-toast {

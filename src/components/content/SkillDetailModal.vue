@@ -33,7 +33,7 @@
           <div v-if="isLoadingReadme" class="sdm-readme-loading">Loading skill contents...</div>
           <div v-else-if="readmeContent" class="sdm-readme" v-html="renderedReadme"></div>
 
-          <a class="sdm-link" :href="skill.url" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+          <a v-if="skill.url" class="sdm-link" :href="skill.url" target="_blank" rel="noopener noreferrer">View on GitHub</a>
         </div>
 
         <div class="sdm-footer">
@@ -46,15 +46,6 @@
               @click="onUninstall"
             >
               {{ props.isUninstalling ? 'Uninstalling...' : 'Uninstall' }}
-            </button>
-            <button
-              v-else
-              class="sdm-btn sdm-btn-primary"
-              type="button"
-              :disabled="isActing"
-              @click="onInstall"
-            >
-              {{ props.isInstalling ? 'Installing...' : 'Install' }}
             </button>
 
             <button
@@ -95,13 +86,11 @@ export type HubSkill = {
 const props = defineProps<{
   skill: HubSkill
   visible: boolean
-  isInstalling?: boolean
   isUninstalling?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  install: [skill: HubSkill]
   uninstall: [skill: HubSkill]
   'toggle-enabled': [skill: HubSkill, enabled: boolean]
 }>()
@@ -111,7 +100,7 @@ const readmeContent = ref('')
 const isLoadingReadme = ref(false)
 
 const effectiveEnabled = computed(() => localEnabled.value ?? props.skill.enabled ?? true)
-const isActing = computed(() => (props.isInstalling === true) || (props.isUninstalling === true))
+const isActing = computed(() => props.isUninstalling === true)
 const projectBadgeLabel = computed(() => (
   props.skill.scope === 'repo' && props.skill.projectName
     ? `Project · ${props.skill.projectName}`
@@ -143,11 +132,11 @@ function simpleMarkdown(md: string): string {
 }
 
 async function fetchReadme(): Promise<void> {
-  if (!props.skill.owner || !props.skill.name) return
+  if (!props.skill.path) return
   isLoadingReadme.value = true
   readmeContent.value = ''
   try {
-    const params = new URLSearchParams({ owner: props.skill.owner, name: props.skill.name })
+    const params = new URLSearchParams({ path: props.skill.path })
     const resp = await fetch(`/codex-api/skills-hub/readme?${params}`)
     if (!resp.ok) return
     const data = (await resp.json()) as { content?: string }
@@ -166,10 +155,6 @@ watch(() => props.visible, (v) => {
     void fetchReadme()
   }
 })
-
-function onInstall(): void {
-  emit('install', props.skill)
-}
 
 function onUninstall(): void {
   emit('uninstall', props.skill)
@@ -299,10 +284,6 @@ function onToggleEnabled(): void {
 
 .sdm-btn {
   @apply rounded-lg px-3 py-1.5 text-sm font-medium transition border-0 disabled:opacity-50 disabled:cursor-not-allowed;
-}
-
-.sdm-btn-primary {
-  @apply bg-zinc-900 text-white hover:bg-black;
 }
 
 .sdm-btn-danger {
