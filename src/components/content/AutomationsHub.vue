@@ -377,6 +377,7 @@ const projects = ref<Array<{ path: string; label: string }>>([])
 const selectedRunId = ref('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let toastTimer: ReturnType<typeof setTimeout> | null = null
+let hasInitializedCreateForm = false
 
 const form = reactive({
   title: '',
@@ -483,6 +484,7 @@ function resetForm(): void {
   form.reasoningEffort = ''
   form.sandboxMode = 'default'
   form.autoArchiveEmpty = true
+  hasInitializedCreateForm = true
 }
 
 function hydrateForm(automation: UiAutomation): void {
@@ -521,7 +523,7 @@ async function refreshAll(): Promise<void> {
       label: workspaceState.labels[path] || shortPath(path),
     }))
 
-    if (!editingId.value) {
+    if (!editingId.value && !hasInitializedCreateForm) {
       resetForm()
     }
     if (!selectedRunId.value && automationState.runs[0]) {
