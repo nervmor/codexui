@@ -1338,6 +1338,35 @@ type DiffViewerLine = {
   text: string
 }
 
+const EXTENSIONLESS_FILE_NAMES = new Set([
+  'AGENTS',
+  'CHANGELOG',
+  'CODEOWNERS',
+  'CONTRIBUTING',
+  'Dockerfile',
+  'Gemfile',
+  'LICENSE',
+  'Makefile',
+  'NOTICE',
+  'Procfile',
+  'README',
+  'Rakefile',
+  'justfile',
+])
+
+function hasFileLikeBasename(value: string): boolean {
+  const basename = getBasename(value)
+  if (!basename || basename === '.' || basename === '..') return false
+  if (/^\.[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(basename)) return true
+  if (/\.[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(basename)) return true
+  return EXTENSIONLESS_FILE_NAMES.has(basename)
+}
+
+function isLikelyDomainPath(value: string): boolean {
+  const [firstSegment = ''] = normalizePathSeparators(value).split('/')
+  return /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(firstSegment)
+}
+
 function isFilePath(value: string): boolean {
   if (!value || /\s/u.test(value)) return false
   if (value.endsWith('/') || value.endsWith('\\')) return false
@@ -1347,10 +1376,16 @@ function isFilePath(value: string): boolean {
   const looksLikeUnixAbsolute = value.startsWith('/')
   const looksLikeWindowsAbsolute = /^[A-Za-z]:[\\/]/u.test(value)
   const looksLikeRelative = value.startsWith('./') || value.startsWith('../') || value.startsWith('~/')
-  if (looksLikeUnixAbsolute || looksLikeWindowsAbsolute || looksLikeRelative) return true
+  if (looksLikeUnixAbsolute || looksLikeWindowsAbsolute || looksLikeRelative) {
+    return hasFileLikeBasename(value)
+  }
 
   // Bare relative paths should look like actual path segments, not arbitrary prose containing "/".
-  return /^[A-Za-z0-9._@-]+(?:[\\/][A-Za-z0-9._@-]+)+$/u.test(value)
+  return (
+    /^[A-Za-z0-9._@-]+(?:[\\/][A-Za-z0-9._@-]+)+$/u.test(value) &&
+    hasFileLikeBasename(value) &&
+    !isLikelyDomainPath(value)
+  )
 }
 
 function getBasename(pathValue: string): string {
