@@ -1,10 +1,5 @@
 <template>
   <div class="skills-hub">
-    <div class="skills-hub-header">
-      <h2 class="skills-hub-title">Skills</h2>
-      <p class="skills-hub-subtitle">Manage locally installed skills across global and project scopes.</p>
-    </div>
-
     <div v-if="toast" class="skills-hub-toast" :class="toastClass">{{ toast.text }}</div>
 
     <div class="skills-hub-toolbar">
@@ -213,18 +208,6 @@ onMounted(() => {
 
 .skills-hub {
   @apply flex flex-col gap-3 sm:gap-4 p-3 sm:p-6 max-w-4xl mx-auto w-full overflow-y-auto h-full;
-}
-
-.skills-hub-header {
-  @apply flex flex-col gap-1;
-}
-
-.skills-hub-title {
-  @apply text-xl sm:text-2xl font-semibold text-zinc-900 m-0;
-}
-
-.skills-hub-subtitle {
-  @apply text-sm text-zinc-500 m-0;
 }
 
 .skills-hub-toolbar {

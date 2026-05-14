@@ -1,16 +1,10 @@
 <template>
   <div ref="hubScrollContainer" class="plugins-hub">
-    <div class="plugins-hub-header">
-      <div>
-        <h2 class="plugins-hub-title">Plugins</h2>
-        <p class="plugins-hub-subtitle">Manage plugins, apps, and MCP integrations exposed by the official Codex app-server.</p>
-      </div>
-      <div class="plugins-hub-capability-row">
-        <span class="plugins-hub-capability" :class="{ 'is-enabled': pluginMethodsAvailable }">Plugins</span>
-        <span class="plugins-hub-capability" :class="{ 'is-enabled': appMethodsAvailable }">Apps</span>
-        <span class="plugins-hub-capability" :class="{ 'is-enabled': mcpMethodsAvailable }">MCP</span>
-        <span class="plugins-hub-capability" :class="{ 'is-enabled': hookMethodsAvailable }">Hooks</span>
-      </div>
+    <div class="plugins-hub-capability-row">
+      <span class="plugins-hub-capability" :class="{ 'is-enabled': pluginMethodsAvailable }">Plugins</span>
+      <span class="plugins-hub-capability" :class="{ 'is-enabled': appMethodsAvailable }">Apps</span>
+      <span class="plugins-hub-capability" :class="{ 'is-enabled': mcpMethodsAvailable }">MCP</span>
+      <span class="plugins-hub-capability" :class="{ 'is-enabled': hookMethodsAvailable }">Hooks</span>
     </div>
 
     <div v-if="toast" class="plugins-hub-toast" :class="toast.type === 'error' ? 'plugins-hub-toast-error' : 'plugins-hub-toast-success'">
@@ -733,18 +727,6 @@ onBeforeUnmount(() => {
 .plugins-hub {
   @apply mx-auto flex h-full w-full max-w-6xl flex-col gap-4 overflow-y-auto p-3 sm:p-6;
   overscroll-behavior-y: contain;
-}
-
-.plugins-hub-header {
-  @apply flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between;
-}
-
-.plugins-hub-title {
-  @apply m-0 text-2xl font-semibold text-zinc-900;
-}
-
-.plugins-hub-subtitle {
-  @apply m-0 text-sm text-zinc-500;
 }
 
 .plugins-hub-capability-row {
