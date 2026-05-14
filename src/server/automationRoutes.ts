@@ -362,6 +362,10 @@ function schedulePresetToCron(preset: AutomationSchedulePreset, customCron: stri
   return customCron.trim()
 }
 
+function defaultCronForSchedulePreset(preset: AutomationSchedulePreset): string {
+  return preset === 'custom' ? '' : schedulePresetToCron(preset, '')
+}
+
 function normalizeSkillToken(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
 }
@@ -959,8 +963,15 @@ class AutomationManager {
     const title = readString(record.title)
     const prompt = typeof record.prompt === 'string' ? record.prompt.trim() : ''
     const projectPaths = readStringArray(record.projectPaths).map((path) => isAbsolute(path) ? path : resolve(path))
-    const schedulePreset = normalizeSchedulePreset(record.schedulePreset)
-    const cronExpression = schedulePresetToCron(schedulePreset, readString(record.cronExpression))
+    const requestedSchedulePreset = normalizeSchedulePreset(record.schedulePreset)
+    const requestedCronExpression = readString(record.cronExpression).trim()
+    const defaultCronExpression = defaultCronForSchedulePreset(requestedSchedulePreset)
+    const schedulePreset = requestedSchedulePreset !== 'custom'
+      && requestedCronExpression
+      && requestedCronExpression !== defaultCronExpression
+      ? 'custom'
+      : requestedSchedulePreset
+    const cronExpression = schedulePresetToCron(schedulePreset, requestedCronExpression)
 
     if (!title) throw new Error('Title is required')
     if (!prompt) throw new Error('Prompt is required')

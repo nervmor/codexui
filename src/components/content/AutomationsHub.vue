@@ -257,7 +257,14 @@
 
           <label class="automations-hub-field">
             <span class="automations-hub-label">Cron</span>
-            <input v-model="form.cronExpression" class="automations-hub-input" type="text" placeholder="0 9 * * 1" :disabled="automationReadOnly" />
+            <input
+              v-model="form.cronExpression"
+              class="automations-hub-input"
+              type="text"
+              placeholder="0 9 * * 1"
+              :disabled="automationReadOnly"
+              @input="onCronExpressionInput"
+            />
           </label>
 
           <div class="automations-hub-field-grid">
@@ -826,6 +833,19 @@ function onPresetChange(value: string): void {
   if (preset === 'hourly') form.cronExpression = '0 * * * *'
   if (preset === 'daily') form.cronExpression = '0 9 * * *'
   if (preset === 'weekly') form.cronExpression = '0 9 * * 1'
+}
+
+function defaultCronForPreset(preset: typeof form.schedulePreset): string {
+  if (preset === 'hourly') return '0 * * * *'
+  if (preset === 'daily') return '0 9 * * *'
+  if (preset === 'weekly') return '0 9 * * 1'
+  return ''
+}
+
+function onCronExpressionInput(): void {
+  if (form.schedulePreset === 'custom') return
+  if (form.cronExpression.trim() === defaultCronForPreset(form.schedulePreset)) return
+  form.schedulePreset = 'custom'
 }
 
 function onRunModeSelect(value: string): void {
