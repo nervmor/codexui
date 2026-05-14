@@ -183,212 +183,240 @@
         <div class="automations-hub-section-header">
           <div>
             <h3 class="automations-hub-section-title">{{ automationReadOnly ? 'Automation details' : editingId ? 'Edit automation' : 'New automation' }}</h3>
-            <p class="automations-hub-detail-meta">{{ automationReadOnly ? 'Debug mode is read-only for automations.' : 'Matches the official app model: recurring background runs with project-scoped context.' }}</p>
+            <p class="automations-hub-detail-meta">{{ automationReadOnly ? 'Debug mode is read-only for automations.' : 'Recurring background run setup' }}</p>
           </div>
           <button v-if="editingId && !automationReadOnly" class="automations-hub-inline-link" type="button" @click="startCreate">Create new instead</button>
         </div>
 
         <div class="automations-hub-form">
-          <label class="automations-hub-field">
-            <span class="automations-hub-label">Title</span>
-            <input v-model="form.title" class="automations-hub-input" type="text" placeholder="Weekly PR triage" :disabled="automationReadOnly" />
-          </label>
+          <section class="automations-hub-form-section">
+            <div class="automations-hub-form-section-head">
+              <span class="automations-hub-form-section-kicker">Task</span>
+              <h4 class="automations-hub-form-section-title">Prompt and output</h4>
+            </div>
 
-          <label class="automations-hub-field">
-            <span class="automations-hub-label">Prompt</span>
-            <textarea
-              v-model="form.prompt"
-              class="automations-hub-textarea"
-              rows="8"
-              placeholder="Review incoming pull requests and report only issues that need attention."
-              :disabled="automationReadOnly"
-            />
-          </label>
-
-          <label class="automations-hub-field">
-            <span class="automations-hub-label">Output schema</span>
-            <textarea
-              v-model="form.outputSchema"
-              class="automations-hub-textarea automations-hub-textarea--compact"
-              rows="5"
-              placeholder='{"type":"object","properties":{"summary":{"type":"string"},"status":{"type":"string","enum":["clear","findings","action_required"]}},"required":["summary","status"],"additionalProperties":false}'
-              :disabled="automationReadOnly"
-            />
-          </label>
-
-          <div class="automations-hub-field">
-            <span class="automations-hub-label">Projects</span>
-            <ComposerSearchDropdown
-              class="automations-hub-picker"
-              :options="projectDropdownOptions"
-              :selected-values="form.projectPaths"
-              :disabled="automationReadOnly"
-              placeholder="Select projects"
-              search-placeholder="Search projects..."
-              @toggle="onProjectToggle"
-            />
-          </div>
-
-          <div class="automations-hub-field-grid">
             <label class="automations-hub-field">
-              <span class="automations-hub-label">Run mode</span>
-              <ComposerDropdown
-                class="automations-hub-dropdown"
-                :model-value="form.runMode"
-                :options="runModeOptions"
+              <span class="automations-hub-label">Title</span>
+              <input v-model="form.title" class="automations-hub-input" type="text" placeholder="Weekly PR triage" :disabled="automationReadOnly" />
+            </label>
+
+            <label class="automations-hub-field">
+              <span class="automations-hub-label">Prompt</span>
+              <textarea
+                v-model="form.prompt"
+                class="automations-hub-textarea"
+                rows="8"
+                placeholder="Review incoming pull requests and report only issues that need attention."
                 :disabled="automationReadOnly"
-                placeholder="Run mode"
-                @update:model-value="onRunModeSelect"
               />
             </label>
 
             <label class="automations-hub-field">
-              <span class="automations-hub-label">Schedule</span>
-              <ComposerDropdown
-                class="automations-hub-dropdown"
-                :model-value="form.schedulePreset"
-                :options="presetOptions"
+              <span class="automations-hub-label">Output schema</span>
+              <textarea
+                v-model="form.outputSchema"
+                class="automations-hub-textarea automations-hub-textarea--compact"
+                rows="5"
+                placeholder='{"type":"object","properties":{"summary":{"type":"string"},"status":{"type":"string","enum":["clear","findings","action_required"]}},"required":["summary","status"],"additionalProperties":false}'
                 :disabled="automationReadOnly"
-                placeholder="Schedule"
-                @update:model-value="onPresetChange"
               />
             </label>
-          </div>
+          </section>
 
-          <label class="automations-hub-field">
-            <span class="automations-hub-label">Cron</span>
-            <input v-model="form.cronExpression" class="automations-hub-input" type="text" placeholder="0 9 * * 1" :disabled="automationReadOnly" />
-          </label>
-
-          <div class="automations-hub-field-grid">
-            <label class="automations-hub-field">
-              <span class="automations-hub-label">Model</span>
-              <ComposerDropdown
-                class="automations-hub-dropdown"
-                :model-value="form.model"
-                :options="modelOptions"
-                :disabled="automationReadOnly"
-                placeholder="Default model"
-                @update:model-value="onModelSelect"
-              />
-            </label>
-
-            <label class="automations-hub-field">
-              <span class="automations-hub-label">Thinking</span>
-              <ComposerDropdown
-                class="automations-hub-dropdown"
-                :model-value="form.reasoningEffort"
-                :options="reasoningOptions"
-                :disabled="automationReadOnly"
-                placeholder="Default thinking"
-                @update:model-value="onReasoningEffortSelect"
-              />
-            </label>
-          </div>
-
-          <div class="automations-hub-field-grid">
-            <label class="automations-hub-field">
-              <span class="automations-hub-label">Sandbox</span>
-              <ComposerDropdown
-                class="automations-hub-dropdown"
-                :model-value="form.sandboxMode"
-                :options="sandboxOptions"
-                :disabled="automationReadOnly"
-                placeholder="Default sandbox"
-                @update:model-value="onSandboxModeSelect"
-              />
-            </label>
+          <section class="automations-hub-form-section">
+            <div class="automations-hub-form-section-head">
+              <span class="automations-hub-form-section-kicker">Scope</span>
+              <h4 class="automations-hub-form-section-title">Projects and schedule</h4>
+            </div>
 
             <div class="automations-hub-field">
-              <span class="automations-hub-label">Skills</span>
+              <span class="automations-hub-label">Projects</span>
               <ComposerSearchDropdown
                 class="automations-hub-picker"
-                :options="skillDropdownOptions"
-                :selected-values="form.skillNames"
+                :options="projectDropdownOptions"
+                :selected-values="form.projectPaths"
                 :disabled="automationReadOnly"
-                placeholder="Optional skills"
-                search-placeholder="Search skills..."
-                @toggle="onSkillToggle"
+                placeholder="Select projects"
+                search-placeholder="Search projects..."
+                @toggle="onProjectToggle"
               />
             </div>
-          </div>
 
-          <div class="automations-hub-field-grid">
+            <div class="automations-hub-field-grid">
+              <label class="automations-hub-field">
+                <span class="automations-hub-label">Run mode</span>
+                <ComposerDropdown
+                  class="automations-hub-dropdown"
+                  :model-value="form.runMode"
+                  :options="runModeOptions"
+                  :disabled="automationReadOnly"
+                  placeholder="Run mode"
+                  @update:model-value="onRunModeSelect"
+                />
+              </label>
+
+              <label class="automations-hub-field">
+                <span class="automations-hub-label">Schedule</span>
+                <ComposerDropdown
+                  class="automations-hub-dropdown"
+                  :model-value="form.schedulePreset"
+                  :options="presetOptions"
+                  :disabled="automationReadOnly"
+                  placeholder="Schedule"
+                  @update:model-value="onPresetChange"
+                />
+              </label>
+            </div>
+
             <label class="automations-hub-field">
-              <span class="automations-hub-label">Web search</span>
+              <span class="automations-hub-label">Cron</span>
+              <input v-model="form.cronExpression" class="automations-hub-input" type="text" placeholder="0 9 * * 1" :disabled="automationReadOnly" />
+            </label>
+          </section>
+
+          <section class="automations-hub-form-section">
+            <div class="automations-hub-form-section-head">
+              <span class="automations-hub-form-section-kicker">Execution</span>
+              <h4 class="automations-hub-form-section-title">Model, sandbox, and skills</h4>
+            </div>
+
+            <div class="automations-hub-field-grid">
+              <label class="automations-hub-field">
+                <span class="automations-hub-label">Model</span>
+                <ComposerDropdown
+                  class="automations-hub-dropdown"
+                  :model-value="form.model"
+                  :options="modelOptions"
+                  :disabled="automationReadOnly"
+                  placeholder="Default model"
+                  @update:model-value="onModelSelect"
+                />
+              </label>
+
+              <label class="automations-hub-field">
+                <span class="automations-hub-label">Thinking</span>
+                <ComposerDropdown
+                  class="automations-hub-dropdown"
+                  :model-value="form.reasoningEffort"
+                  :options="reasoningOptions"
+                  :disabled="automationReadOnly"
+                  placeholder="Default thinking"
+                  @update:model-value="onReasoningEffortSelect"
+                />
+              </label>
+            </div>
+
+            <div class="automations-hub-field-grid">
+              <label class="automations-hub-field">
+                <span class="automations-hub-label">Sandbox</span>
+                <ComposerDropdown
+                  class="automations-hub-dropdown"
+                  :model-value="form.sandboxMode"
+                  :options="sandboxOptions"
+                  :disabled="automationReadOnly"
+                  placeholder="Default sandbox"
+                  @update:model-value="onSandboxModeSelect"
+                />
+              </label>
+
+              <div class="automations-hub-field">
+                <span class="automations-hub-label">Skills</span>
+                <ComposerSearchDropdown
+                  class="automations-hub-picker"
+                  :options="skillDropdownOptions"
+                  :selected-values="form.skillNames"
+                  :disabled="automationReadOnly"
+                  placeholder="Optional skills"
+                  search-placeholder="Search skills..."
+                  @toggle="onSkillToggle"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section class="automations-hub-form-section">
+            <div class="automations-hub-form-section-head">
+              <span class="automations-hub-form-section-kicker">Safety</span>
+              <h4 class="automations-hub-form-section-title">Access and run state</h4>
+            </div>
+
+            <div class="automations-hub-field-grid">
+              <label class="automations-hub-field">
+                <span class="automations-hub-label">Web search</span>
+                <ComposerDropdown
+                  class="automations-hub-dropdown"
+                  :model-value="form.webSearchMode"
+                  :options="webSearchOptions"
+                  :disabled="automationReadOnly"
+                  placeholder="Web search"
+                  @update:model-value="onWebSearchModeSelect"
+                />
+              </label>
+
+              <label class="automations-hub-field">
+                <span class="automations-hub-label">Approval policy</span>
+                <ComposerDropdown
+                  class="automations-hub-dropdown"
+                  :model-value="form.approvalPolicy"
+                  :options="approvalPolicyOptions"
+                  :disabled="automationReadOnly"
+                  placeholder="Approval policy"
+                  @update:model-value="onApprovalPolicySelect"
+                />
+              </label>
+            </div>
+
+            <label class="automations-hub-field">
+              <span class="automations-hub-label">Approval reviewer</span>
               <ComposerDropdown
                 class="automations-hub-dropdown"
-                :model-value="form.webSearchMode"
-                :options="webSearchOptions"
+                :model-value="form.approvalsReviewer"
+                :options="approvalsReviewerOptions"
                 :disabled="automationReadOnly"
-                placeholder="Web search"
-                @update:model-value="onWebSearchModeSelect"
+                placeholder="Approval reviewer"
+                @update:model-value="onApprovalsReviewerSelect"
               />
             </label>
 
-            <label class="automations-hub-field">
-              <span class="automations-hub-label">Approval policy</span>
-              <ComposerDropdown
-                class="automations-hub-dropdown"
-                :model-value="form.approvalPolicy"
-                :options="approvalPolicyOptions"
-                :disabled="automationReadOnly"
-                placeholder="Approval policy"
-                @update:model-value="onApprovalPolicySelect"
-              />
-            </label>
-          </div>
+            <div class="automations-hub-switch-grid">
+              <label class="automations-hub-switch">
+                <input v-model="form.resumeThread" type="checkbox" :disabled="automationReadOnly" />
+                <span>Resume previous thread</span>
+              </label>
 
-          <label class="automations-hub-field">
-            <span class="automations-hub-label">Approval reviewer</span>
-            <ComposerDropdown
-              class="automations-hub-dropdown"
-              :model-value="form.approvalsReviewer"
-              :options="approvalsReviewerOptions"
-              :disabled="automationReadOnly"
-              placeholder="Approval reviewer"
-              @update:model-value="onApprovalsReviewerSelect"
-            />
-          </label>
+              <label class="automations-hub-switch">
+                <input v-model="form.ephemeral" type="checkbox" :disabled="automationReadOnly" />
+                <span>Ephemeral session</span>
+              </label>
 
-          <div class="automations-hub-switch-grid">
-            <label class="automations-hub-switch">
-              <input v-model="form.resumeThread" type="checkbox" :disabled="automationReadOnly" />
-              <span>Resume the previous thread for each project.</span>
-            </label>
+              <label class="automations-hub-switch">
+                <input v-model="form.ignoreUserConfig" type="checkbox" :disabled="automationReadOnly" />
+                <span>Ignore user config</span>
+              </label>
 
-            <label class="automations-hub-switch">
-              <input v-model="form.ephemeral" type="checkbox" :disabled="automationReadOnly" />
-              <span>Run without persisting Codex session files.</span>
-            </label>
+              <label class="automations-hub-switch">
+                <input v-model="form.ignoreRules" type="checkbox" :disabled="automationReadOnly" />
+                <span>Ignore exec rules</span>
+              </label>
 
-            <label class="automations-hub-switch">
-              <input v-model="form.ignoreUserConfig" type="checkbox" :disabled="automationReadOnly" />
-              <span>Ignore user config for this run.</span>
-            </label>
+              <label class="automations-hub-switch">
+                <input v-model="form.networkAccess" type="checkbox" :disabled="automationReadOnly" />
+                <span>Network access</span>
+              </label>
 
-            <label class="automations-hub-switch">
-              <input v-model="form.ignoreRules" type="checkbox" :disabled="automationReadOnly" />
-              <span>Ignore exec policy rules for this run.</span>
-            </label>
+              <label class="automations-hub-switch">
+                <input v-model="form.autoArchiveEmpty" type="checkbox" :disabled="automationReadOnly" />
+                <span>Auto-archive empty runs</span>
+              </label>
 
-            <label class="automations-hub-switch">
-              <input v-model="form.networkAccess" type="checkbox" :disabled="automationReadOnly" />
-              <span>Enable workspace-write network access.</span>
-            </label>
-          </div>
+              <label class="automations-hub-switch">
+                <input v-model="form.enabled" type="checkbox" :disabled="automationReadOnly" />
+                <span>Enable after saving</span>
+              </label>
+            </div>
+          </section>
 
-          <label class="automations-hub-switch">
-            <input v-model="form.autoArchiveEmpty" type="checkbox" :disabled="automationReadOnly" />
-            <span>Archive runs automatically when the result looks empty or “nothing to report”.</span>
-          </label>
-
-          <label class="automations-hub-switch">
-            <input v-model="form.enabled" type="checkbox" :disabled="automationReadOnly" />
-            <span>Enable immediately after saving.</span>
-          </label>
-
-          <div v-if="!automationReadOnly" class="automations-hub-inline-actions">
+          <div v-if="!automationReadOnly" class="automations-hub-form-actions">
             <button class="automations-hub-button is-primary" type="button" :disabled="saving" @click="saveAutomation">
               {{ saving ? 'Saving…' : editingId ? 'Save automation' : 'Create automation' }}
             </button>
@@ -1088,19 +1116,19 @@ onBeforeUnmount(() => {
 @reference "tailwindcss";
 
 .automations-hub {
-  @apply mx-auto flex h-full w-full max-w-7xl flex-col gap-2.5 overflow-y-auto p-2.5 sm:p-3;
+  @apply mx-auto flex h-full w-full max-w-7xl flex-col gap-3 overflow-y-auto bg-zinc-50/70 p-3 sm:p-4;
 }
 
 .automations-hub-header {
-  @apply flex flex-wrap items-center justify-between gap-2;
+  @apply flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 shadow-sm;
 }
 
 .automations-hub-actions {
-  @apply flex flex-wrap gap-1.5;
+  @apply flex flex-wrap gap-2;
 }
 
 .automations-hub-button {
-  @apply inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60;
+  @apply inline-flex min-h-8 items-center justify-center rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60;
 }
 
 .automations-hub-button.is-primary {
@@ -1108,7 +1136,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-toast {
-  @apply rounded-md border px-2.5 py-1.5 text-xs font-medium;
+  @apply rounded-lg border px-3 py-2 text-xs font-medium shadow-sm;
 }
 
 .automations-hub-toast.is-success {
@@ -1120,23 +1148,23 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-tabs {
-  @apply flex flex-wrap gap-1.5;
+  @apply flex rounded-lg border border-zinc-200 bg-zinc-100 p-1;
 }
 
 .automations-hub-tab {
-  @apply rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50;
+  @apply rounded-md border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-white/70;
 }
 
 .automations-hub-tab.is-active {
-  @apply border-zinc-900 bg-zinc-900 text-white;
+  @apply border-zinc-200 bg-white text-zinc-950 shadow-sm;
 }
 
 .automations-hub-split {
-  @apply grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[minmax(18rem,0.78fr)_minmax(0,1.35fr)];
+  @apply grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(19rem,0.78fr)_minmax(0,1.35fr)];
 }
 
 .automations-hub-split--triage {
-  @apply lg:grid-cols-[minmax(18rem,0.62fr)_minmax(0,1.55fr)];
+  @apply lg:grid-cols-[minmax(19rem,0.62fr)_minmax(0,1.55fr)];
 }
 
 .automations-hub-split.is-list-hidden {
@@ -1148,7 +1176,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-panel {
-  @apply flex min-h-0 flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-2.5;
+  @apply flex min-h-0 flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-sm;
 }
 
 .automations-hub-panel--list,
@@ -1246,15 +1274,15 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-section-header {
-  @apply flex flex-wrap items-start justify-between gap-2;
+  @apply flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 pb-2.5;
 }
 
 .automations-hub-section-title {
-  @apply m-0 text-xs font-semibold text-zinc-900;
+  @apply m-0 text-sm font-semibold text-zinc-950;
 }
 
 .automations-hub-section-count {
-  @apply rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] text-zinc-500;
+  @apply rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-500;
 }
 
 .automations-hub-pill-row {
@@ -1262,15 +1290,15 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-pill {
-  @apply rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-500 transition hover:bg-zinc-100;
+  @apply rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-600 transition hover:border-zinc-300 hover:bg-white;
 }
 
 .automations-hub-pill.is-active {
-  @apply border-zinc-900 bg-zinc-900 text-white;
+  @apply border-sky-200 bg-sky-50 text-sky-700;
 }
 
 .automations-hub-empty {
-  @apply rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-3 py-6 text-center text-xs text-zinc-500;
+  @apply rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-8 text-center text-xs text-zinc-500;
 }
 
 .automations-hub-run-list,
@@ -1280,7 +1308,7 @@ onBeforeUnmount(() => {
 
 .automations-hub-run-card,
 .automations-hub-automation-card {
-  @apply flex flex-col gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-2 text-left transition hover:border-zinc-300 hover:bg-white;
+  @apply flex flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-3 text-left shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50;
 }
 
 .automations-hub-run-card {
@@ -1289,23 +1317,23 @@ onBeforeUnmount(() => {
 
 .automations-hub-run-card.is-active,
 .automations-hub-automation-card.is-selected {
-  @apply border-zinc-900 bg-white shadow-sm;
+  @apply border-zinc-900 bg-white shadow-md;
 }
 
 .automations-hub-run-card.is-unread {
-  @apply border-sky-300;
+  @apply border-sky-300 bg-sky-50/40;
 }
 
 .automations-hub-run-top {
-  @apply flex min-w-0 items-start justify-between gap-1.5;
+  @apply flex min-w-0 items-start justify-between gap-2;
 }
 
 .automations-hub-run-title {
-  @apply min-w-0 flex-1 truncate text-xs font-semibold text-zinc-900;
+  @apply min-w-0 flex-1 truncate text-sm font-semibold text-zinc-950;
 }
 
 .automations-hub-run-status {
-  @apply shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-medium;
+  @apply shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium;
 }
 
 .automations-hub-run-status.is-running {
@@ -1326,7 +1354,7 @@ onBeforeUnmount(() => {
 
 .automations-hub-run-meta,
 .automations-hub-detail-meta {
-  @apply m-0 text-[11px] leading-4 text-zinc-500;
+  @apply m-0 text-xs leading-5 text-zinc-500;
 }
 
 .automations-hub-run-meta {
@@ -1334,15 +1362,15 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-run-summary {
-  @apply m-0 text-[11px] leading-4 text-zinc-600 line-clamp-2;
+  @apply m-0 text-xs leading-5 text-zinc-600 line-clamp-2;
 }
 
 .automations-hub-inline-actions {
-  @apply flex flex-wrap gap-1.5;
+  @apply flex flex-wrap gap-2;
 }
 
 .automations-hub-inline-link {
-  @apply inline-flex w-fit items-center rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50;
+  @apply inline-flex min-h-7 w-fit items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50;
 }
 
 .automations-hub-inline-link:disabled {
@@ -1362,7 +1390,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-stat-label {
-  @apply block text-[11px] uppercase tracking-[0.08em] text-zinc-500;
+  @apply block text-[11px] font-medium uppercase tracking-normal text-zinc-500;
 }
 
 .automations-hub-stat-value {
@@ -1370,7 +1398,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-callout {
-  @apply m-0 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs text-zinc-600;
+  @apply m-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600;
 }
 
 .automations-hub-callout.is-error {
@@ -1378,11 +1406,11 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-output {
-  @apply min-h-[24rem] flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-6 text-zinc-800;
+  @apply min-h-[24rem] flex-1 overflow-auto rounded-lg border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm leading-6 text-zinc-800;
 }
 
 .automations-hub-structured-output {
-  @apply max-h-32 overflow-auto rounded-md border border-zinc-200 bg-zinc-950 px-2.5 py-2 font-mono text-[11px] leading-5 text-zinc-100;
+  @apply max-h-32 overflow-auto rounded-lg border border-zinc-200 bg-zinc-950 px-3 py-2 font-mono text-[11px] leading-5 text-zinc-100;
 }
 
 .automations-hub-event-list {
@@ -1390,7 +1418,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-event {
-  @apply rounded-md border border-zinc-200 bg-zinc-50 p-2;
+  @apply rounded-lg border border-zinc-200 bg-white p-3;
 }
 
 .automations-hub-event-top {
@@ -1452,7 +1480,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-output :deep(pre span) {
-  @apply mb-2 block text-[10px] uppercase tracking-[0.08em] text-zinc-400;
+  @apply mb-2 block text-[10px] font-medium uppercase tracking-normal text-zinc-400;
 }
 
 .automations-hub-output :deep(a) {
@@ -1468,15 +1496,31 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-chip {
-  @apply max-w-full break-all rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] leading-4 text-zinc-600;
+  @apply max-w-full break-all rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] leading-4 text-zinc-600;
 }
 
 .automations-hub-form {
-  @apply flex min-h-0 flex-col gap-3 overflow-y-auto pr-1;
+  @apply flex min-h-0 flex-col gap-5 overflow-y-auto pr-1;
+}
+
+.automations-hub-form-section {
+  @apply flex flex-col gap-3 border-t border-zinc-100 pt-4 first:border-t-0 first:pt-0;
+}
+
+.automations-hub-form-section-head {
+  @apply flex flex-col gap-0.5;
+}
+
+.automations-hub-form-section-kicker {
+  @apply text-[11px] font-medium uppercase tracking-normal text-sky-700;
+}
+
+.automations-hub-form-section-title {
+  @apply m-0 text-sm font-semibold text-zinc-950;
 }
 
 .automations-hub-field {
-  @apply flex flex-col gap-1.5;
+  @apply flex min-w-0 flex-col gap-1.5;
 }
 
 .automations-hub-field-grid {
@@ -1484,17 +1528,17 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-label {
-  @apply text-xs font-medium uppercase tracking-[0.08em] text-zinc-500;
+  @apply text-xs font-medium text-zinc-600;
 }
 
 .automations-hub-input,
 .automations-hub-textarea {
-  @apply w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-300 focus:bg-white;
+  @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-sky-300 focus:bg-white focus:ring-2 focus:ring-sky-100;
 }
 
 .automations-hub-input:disabled,
 .automations-hub-textarea:disabled {
-  @apply cursor-not-allowed text-zinc-500;
+  @apply cursor-not-allowed bg-zinc-50 text-zinc-500;
 }
 
 .automations-hub-textarea {
@@ -1507,18 +1551,22 @@ onBeforeUnmount(() => {
 
 .automations-hub-picker,
 .automations-hub-dropdown {
-  @apply rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2;
+  @apply min-h-10 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-sky-100;
 }
 
 .automations-hub-switch {
-  @apply flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700;
+  @apply flex min-h-11 items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300;
 }
 
 .automations-hub-switch-grid {
-  @apply grid gap-2 md:grid-cols-2;
+  @apply grid gap-2 sm:grid-cols-2;
 }
 
 .automations-hub-switch input {
-  @apply mt-0.5;
+  @apply h-5 w-9 shrink-0 cursor-pointer appearance-none rounded-full border border-zinc-300 bg-zinc-200 transition before:block before:h-4 before:w-4 before:translate-x-0.5 before:translate-y-0.5 before:rounded-full before:bg-white before:shadow-sm before:transition before:content-[''] checked:border-emerald-500 checked:bg-emerald-500 checked:before:translate-x-4 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.automations-hub-form-actions {
+  @apply sticky bottom-0 flex flex-wrap gap-2 border-t border-zinc-100 bg-white/95 py-3 backdrop-blur;
 }
 </style>
