@@ -70,7 +70,6 @@
               <span class="automations-hub-run-status" :class="`is-${run.status}`">{{ runStatusLabel(run) }}</span>
             </div>
             <p class="automations-hub-run-meta">{{ shortPath(run.projectPath) }} · {{ formatDateTime(run.startedAtIso) }}</p>
-            <p class="automations-hub-run-summary">{{ run.summary || (run.error || 'Run finished.') }}</p>
           </button>
         </div>
       </section>
@@ -1244,6 +1243,10 @@ onBeforeUnmount(() => {
   @apply flex flex-col gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-2 text-left transition hover:border-zinc-300 hover:bg-white;
 }
 
+.automations-hub-run-card {
+  @apply min-w-0;
+}
+
 .automations-hub-run-card.is-active,
 .automations-hub-automation-card.is-selected {
   @apply border-zinc-900 bg-white shadow-sm;
@@ -1254,15 +1257,15 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-run-top {
-  @apply flex flex-wrap items-center justify-between gap-1.5;
+  @apply flex min-w-0 items-start justify-between gap-1.5;
 }
 
 .automations-hub-run-title {
-  @apply text-xs font-semibold text-zinc-900;
+  @apply min-w-0 flex-1 truncate text-xs font-semibold text-zinc-900;
 }
 
 .automations-hub-run-status {
-  @apply rounded-md border px-1.5 py-0.5 text-[9px] font-medium;
+  @apply shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-medium;
 }
 
 .automations-hub-run-status.is-running {
@@ -1284,6 +1287,10 @@ onBeforeUnmount(() => {
 .automations-hub-run-meta,
 .automations-hub-detail-meta {
   @apply m-0 text-[11px] leading-4 text-zinc-500;
+}
+
+.automations-hub-run-meta {
+  @apply truncate;
 }
 
 .automations-hub-run-summary {
