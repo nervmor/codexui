@@ -1,14 +1,14 @@
 <template>
-  <DesktopLayout :is-sidebar-collapsed="effectiveSidebarCollapsed" @close-sidebar="collapseSidebarFromChrome">
+  <DesktopLayout :is-sidebar-collapsed="isSidebarCollapsed" @close-sidebar="setSidebarCollapsed(true)">
     <template #sidebar>
       <section class="sidebar-root">
         <div class="sidebar-scrollable">
           <SidebarThreadControls
-            v-if="!effectiveSidebarCollapsed"
+            v-if="!isSidebarCollapsed"
             class="sidebar-thread-controls-host"
-            :is-sidebar-collapsed="effectiveSidebarCollapsed"
+            :is-sidebar-collapsed="isSidebarCollapsed"
             :show-new-thread-button="true"
-            @toggle-sidebar="toggleSidebarFromChrome"
+            @toggle-sidebar="setSidebarCollapsed(!isSidebarCollapsed)"
             @start-new-thread="onStartNewThreadFromToolbar"
           >
             <button
@@ -23,7 +23,7 @@
             </button>
           </SidebarThreadControls>
 
-          <div v-if="!effectiveSidebarCollapsed && isSidebarSearchVisible" class="sidebar-search-bar">
+          <div v-if="!isSidebarCollapsed && isSidebarSearchVisible" class="sidebar-search-bar">
             <IconTablerSearch class="sidebar-search-bar-icon" />
             <input
               ref="sidebarSearchInputRef"
@@ -45,7 +45,7 @@
           </div>
 
           <button
-            v-if="!effectiveSidebarCollapsed"
+            v-if="!isSidebarCollapsed"
             class="sidebar-skills-link"
             :class="{ 'is-active': isPluginsRoute }"
             type="button"
@@ -55,7 +55,7 @@
           </button>
 
           <button
-            v-if="!effectiveSidebarCollapsed"
+            v-if="!isSidebarCollapsed"
             class="sidebar-skills-link"
             :class="{ 'is-active': isAutomationsRoute }"
             type="button"
@@ -65,7 +65,7 @@
           </button>
 
           <button
-            v-if="!effectiveSidebarCollapsed"
+            v-if="!isSidebarCollapsed"
             class="sidebar-skills-link"
             :class="{ 'is-active': isSkillsRoute }"
             type="button"
@@ -75,7 +75,7 @@
           </button>
 
           <SidebarThreadTree :groups="projectGroups" :project-display-name-by-id="projectDisplayNameById"
-            v-if="!effectiveSidebarCollapsed"
+            v-if="!isSidebarCollapsed"
             :selected-thread-id="selectedThreadId" :is-loading="isLoadingThreads"
             :search-query="sidebarSearchQuery"
             :search-matched-thread-ids="serverMatchedThreadIds"
@@ -94,7 +94,7 @@
             @export-thread="onExportThread" />
         </div>
 
-        <div v-if="!effectiveSidebarCollapsed" class="sidebar-settings-area">
+        <div v-if="!isSidebarCollapsed" class="sidebar-settings-area">
           <Transition name="settings-panel">
             <div v-if="isSettingsOpen" class="sidebar-settings-panel">
               <div class="sidebar-settings-account-section">
@@ -202,11 +202,11 @@
         <ContentHeader :title="contentTitle">
           <template #leading>
             <SidebarThreadControls
-              v-if="effectiveSidebarCollapsed || isMobile"
+              v-if="isSidebarCollapsed || isMobile"
               class="sidebar-thread-controls-header-host"
-              :is-sidebar-collapsed="effectiveSidebarCollapsed"
+              :is-sidebar-collapsed="isSidebarCollapsed"
               :show-new-thread-button="true"
-              @toggle-sidebar="toggleSidebarFromChrome"
+              @toggle-sidebar="setSidebarCollapsed(!isSidebarCollapsed)"
               @start-new-thread="onStartNewThreadFromToolbar"
             />
           </template>
@@ -447,7 +447,6 @@ const projectGitLoadingById = ref<Record<string, boolean>>({})
 const projectGitErrorById = ref<Record<string, string>>({})
 const projectGitActionById = ref<Record<string, string>>({})
 const isSidebarCollapsed = ref(loadSidebarCollapsed())
-const isAutomationSidebarPinnedOpen = ref(false)
 const sidebarSearchQuery = ref('')
 const isSidebarSearchVisible = ref(false)
 const sidebarSearchInputRef = ref<HTMLInputElement | null>(null)
@@ -510,9 +509,6 @@ const isPluginsRoute = computed(() => route.name === 'plugins')
 const isAutomationsRoute = computed(() => route.name === 'automations')
 const isSkillsRoute = computed(() => route.name === 'skills')
 const isFilesRoute = computed(() => route.name === 'files')
-const effectiveSidebarCollapsed = computed(() =>
-  isAutomationsRoute.value ? !isAutomationSidebarPinnedOpen.value : isSidebarCollapsed.value,
-)
 const contentTitle = computed(() => {
   if (isPluginsRoute.value) return 'Plugins'
   if (isAutomationsRoute.value) return 'Automations'
@@ -1147,29 +1143,13 @@ function setSidebarCollapsed(nextValue: boolean): void {
   saveSidebarCollapsed(nextValue)
 }
 
-function collapseSidebarFromChrome(): void {
-  if (isAutomationsRoute.value) {
-    isAutomationSidebarPinnedOpen.value = false
-    return
-  }
-  setSidebarCollapsed(true)
-}
-
-function toggleSidebarFromChrome(): void {
-  if (isAutomationsRoute.value) {
-    isAutomationSidebarPinnedOpen.value = !isAutomationSidebarPinnedOpen.value
-    return
-  }
-  setSidebarCollapsed(!isSidebarCollapsed.value)
-}
-
 function onWindowKeyDown(event: KeyboardEvent): void {
   if (event.defaultPrevented) return
   if (!event.ctrlKey && !event.metaKey) return
   if (event.shiftKey || event.altKey) return
   if (event.key.toLowerCase() !== 'b') return
   event.preventDefault()
-  toggleSidebarFromChrome()
+  setSidebarCollapsed(!isSidebarCollapsed.value)
 }
 
 function onDocumentVisibilityChange(): void {
@@ -1818,9 +1798,6 @@ watch(
   (name) => {
     if (name !== 'thread') {
       isReviewPaneOpen.value = false
-    }
-    if (name !== 'automations') {
-      isAutomationSidebarPinnedOpen.value = false
     }
   },
 )

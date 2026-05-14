@@ -14,6 +14,9 @@
         </button>
       </div>
       <div class="automations-hub-actions">
+        <button class="automations-hub-button" type="button" @click="isListVisible = !isListVisible">
+          {{ isListVisible ? 'Hide list' : 'Show list' }}
+        </button>
         <button class="automations-hub-button" type="button" :disabled="loading" @click="refreshAll">
           {{ loading ? 'Refreshing…' : 'Refresh' }}
         </button>
@@ -27,8 +30,12 @@
       {{ toast.text }}
     </div>
 
-    <div v-if="activeTab === 'triage'" class="automations-hub-split automations-hub-split--triage">
-      <section class="automations-hub-panel automations-hub-panel--list">
+    <div
+      v-if="activeTab === 'triage'"
+      class="automations-hub-split automations-hub-split--triage"
+      :class="{ 'is-list-hidden': !isListVisible }"
+    >
+      <section v-if="isListVisible" class="automations-hub-panel automations-hub-panel--list">
         <div class="automations-hub-section-header">
           <h3 class="automations-hub-section-title">Inbox</h3>
           <div class="automations-hub-pill-row">
@@ -56,7 +63,7 @@
             class="automations-hub-run-card"
             :class="{ 'is-active': selectedRunId === run.id, 'is-unread': run.unread }"
             type="button"
-            @click="selectedRunId = run.id"
+            @click="selectRun(run.id)"
           >
             <div class="automations-hub-run-top">
               <span class="automations-hub-run-title">{{ run.automationTitle }}</span>
@@ -131,8 +138,8 @@
       </section>
     </div>
 
-    <div v-else class="automations-hub-split">
-      <section class="automations-hub-panel automations-hub-panel--list">
+    <div v-else class="automations-hub-split" :class="{ 'is-list-hidden': !isListVisible }">
+      <section v-if="isListVisible" class="automations-hub-panel automations-hub-panel--list">
         <div class="automations-hub-section-header">
           <h3 class="automations-hub-section-title">Automations</h3>
           <span class="automations-hub-section-count">{{ automations.length }}</span>
@@ -442,6 +449,7 @@ const models = ref<UiCodexModel[]>([])
 const skills = ref<Array<{ name: string; description: string; path: string; scope?: string; projectName?: string }>>([])
 const projects = ref<Array<{ path: string; label: string }>>([])
 const selectedRunId = ref('')
+const isListVisible = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let hasInitializedCreateForm = false
@@ -877,12 +885,19 @@ function onSkillToggle(value: string, checked: boolean): void {
 
 function startCreate(): void {
   activeTab.value = 'automations'
+  isListVisible.value = false
   resetForm()
 }
 
 function startEdit(automation: UiAutomation): void {
   activeTab.value = 'automations'
+  isListVisible.value = false
   hydrateForm(automation)
+}
+
+function selectRun(id: string): void {
+  selectedRunId.value = id
+  isListVisible.value = false
 }
 
 async function saveAutomation(): Promise<void> {
@@ -1117,6 +1132,14 @@ onBeforeUnmount(() => {
 
 .automations-hub-split--triage {
   @apply lg:grid-cols-[minmax(18rem,0.62fr)_minmax(0,1.55fr)];
+}
+
+.automations-hub-split.is-list-hidden {
+  @apply block;
+}
+
+.automations-hub-split.is-list-hidden .automations-hub-panel--detail {
+  @apply h-full;
 }
 
 .automations-hub-panel {
