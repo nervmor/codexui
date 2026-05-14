@@ -1563,6 +1563,15 @@ export type UiAutomation = {
   model: string
   reasoningEffort: string
   sandboxMode: 'default' | 'read-only' | 'workspace-write' | 'danger-full-access'
+  outputSchema: string
+  resumeThread: boolean
+  ephemeral: boolean
+  ignoreUserConfig: boolean
+  ignoreRules: boolean
+  networkAccess: boolean
+  webSearchMode: 'default' | 'disabled' | 'live'
+  approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+  approvalsReviewer: 'default' | 'user' | 'auto_review'
   autoArchiveEmpty: boolean
   createdAtIso: string
   updatedAtIso: string
@@ -1571,6 +1580,21 @@ export type UiAutomation = {
   lastSuccessAtIso: string | null
   lastStatus: 'idle' | 'running' | 'succeeded' | 'failed'
   lastError: string
+}
+
+export type UiAutomationUsage = {
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  reasoningOutputTokens: number
+}
+
+export type UiAutomationRunItem = {
+  id: string
+  type: string
+  title: string
+  status: string
+  body: string
 }
 
 export type UiAutomationRun = {
@@ -1595,6 +1619,13 @@ export type UiAutomationRun = {
   model: string
   reasoningEffort: string
   sandboxMode: string
+  webSearchMode: 'default' | 'disabled' | 'live'
+  approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+  approvalsReviewer: 'default' | 'user' | 'auto_review'
+  resumedThreadId: string
+  usage: UiAutomationUsage | null
+  items: UiAutomationRunItem[]
+  structuredResult: unknown | null
   hasFindings: boolean
 }
 
@@ -1615,6 +1646,9 @@ function normalizeUiAutomation(value: unknown): UiAutomation | null {
   const lastStatus = readString(record.lastStatus)
   const runMode = readString(record.runMode)
   const schedulePreset = readString(record.schedulePreset)
+  const webSearchMode = readString(record.webSearchMode)
+  const approvalPolicy = readString(record.approvalPolicy)
+  const approvalsReviewer = readString(record.approvalsReviewer)
   return {
     id,
     title,
@@ -1628,6 +1662,15 @@ function normalizeUiAutomation(value: unknown): UiAutomation | null {
     model: readString(record.model) ?? '',
     reasoningEffort: readString(record.reasoningEffort) ?? '',
     sandboxMode: sandboxMode === 'read-only' || sandboxMode === 'workspace-write' || sandboxMode === 'danger-full-access' ? sandboxMode : 'default',
+    outputSchema: typeof record.outputSchema === 'string' ? record.outputSchema : '',
+    resumeThread: readBoolean(record.resumeThread) ?? false,
+    ephemeral: readBoolean(record.ephemeral) ?? false,
+    ignoreUserConfig: readBoolean(record.ignoreUserConfig) ?? false,
+    ignoreRules: readBoolean(record.ignoreRules) ?? false,
+    networkAccess: readBoolean(record.networkAccess) ?? false,
+    webSearchMode: webSearchMode === 'disabled' || webSearchMode === 'live' ? webSearchMode : 'default',
+    approvalPolicy: approvalPolicy === 'never' || approvalPolicy === 'on-request' || approvalPolicy === 'on-failure' || approvalPolicy === 'untrusted' ? approvalPolicy : 'default',
+    approvalsReviewer: approvalsReviewer === 'user' || approvalsReviewer === 'auto_review' ? approvalsReviewer : 'default',
     autoArchiveEmpty: readBoolean(record.autoArchiveEmpty) ?? true,
     createdAtIso: readString(record.createdAtIso) ?? '',
     updatedAtIso: readString(record.updatedAtIso) ?? '',
@@ -1637,6 +1680,38 @@ function normalizeUiAutomation(value: unknown): UiAutomation | null {
     lastStatus: lastStatus === 'running' || lastStatus === 'succeeded' || lastStatus === 'failed' ? lastStatus : 'idle',
     lastError: readString(record.lastError) ?? '',
   }
+}
+
+function normalizeUiAutomationUsage(value: unknown): UiAutomationUsage | null {
+  const record = asRecord(value)
+  if (!record) return null
+  return {
+    inputTokens: readNumber(record.inputTokens) ?? 0,
+    cachedInputTokens: readNumber(record.cachedInputTokens) ?? 0,
+    outputTokens: readNumber(record.outputTokens) ?? 0,
+    reasoningOutputTokens: readNumber(record.reasoningOutputTokens) ?? 0,
+  }
+}
+
+function normalizeUiAutomationRunItems(value: unknown): UiAutomationRunItem[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      const record = asRecord(entry)
+      if (!record) return null
+      const id = readString(record.id)
+      const type = readString(record.type)
+      const title = readString(record.title)
+      if (!id || !type || !title) return null
+      return {
+        id,
+        type,
+        title,
+        status: readString(record.status) ?? '',
+        body: typeof record.body === 'string' ? record.body : '',
+      }
+    })
+    .filter((entry): entry is UiAutomationRunItem => entry !== null)
 }
 
 function normalizeUiAutomationRun(value: unknown): UiAutomationRun | null {
@@ -1650,6 +1725,9 @@ function normalizeUiAutomationRun(value: unknown): UiAutomationRun | null {
   if (!id || !automationId || !automationTitle || !projectPath || !cwd) return null
   const status = readString(record.status)
   const effectiveRunMode = readString(record.effectiveRunMode)
+  const webSearchMode = readString(record.webSearchMode)
+  const approvalPolicy = readString(record.approvalPolicy)
+  const approvalsReviewer = readString(record.approvalsReviewer)
   return {
     id,
     automationId,
@@ -1672,6 +1750,13 @@ function normalizeUiAutomationRun(value: unknown): UiAutomationRun | null {
     model: readString(record.model) ?? '',
     reasoningEffort: readString(record.reasoningEffort) ?? '',
     sandboxMode: readString(record.sandboxMode) ?? '',
+    webSearchMode: webSearchMode === 'disabled' || webSearchMode === 'live' ? webSearchMode : 'default',
+    approvalPolicy: approvalPolicy === 'never' || approvalPolicy === 'on-request' || approvalPolicy === 'on-failure' || approvalPolicy === 'untrusted' ? approvalPolicy : 'default',
+    approvalsReviewer: approvalsReviewer === 'user' || approvalsReviewer === 'auto_review' ? approvalsReviewer : 'default',
+    resumedThreadId: readString(record.resumedThreadId) ?? '',
+    usage: normalizeUiAutomationUsage(record.usage),
+    items: normalizeUiAutomationRunItems(record.items),
+    structuredResult: record.structuredResult === undefined ? null : record.structuredResult,
     hasFindings: readBoolean(record.hasFindings) ?? false,
   }
 }
@@ -1717,6 +1802,15 @@ export async function createAutomation(payload: {
   model: string
   reasoningEffort: string
   sandboxMode: 'default' | 'read-only' | 'workspace-write' | 'danger-full-access'
+  outputSchema: string
+  resumeThread: boolean
+  ephemeral: boolean
+  ignoreUserConfig: boolean
+  ignoreRules: boolean
+  networkAccess: boolean
+  webSearchMode: 'default' | 'disabled' | 'live'
+  approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+  approvalsReviewer: 'default' | 'user' | 'auto_review'
   autoArchiveEmpty: boolean
 }): Promise<UiAutomation> {
   const response = await fetch('/codex-api/automations', {
@@ -1748,6 +1842,15 @@ export async function updateAutomation(
     model: string
     reasoningEffort: string
     sandboxMode: 'default' | 'read-only' | 'workspace-write' | 'danger-full-access'
+    outputSchema: string
+    resumeThread: boolean
+    ephemeral: boolean
+    ignoreUserConfig: boolean
+    ignoreRules: boolean
+    networkAccess: boolean
+    webSearchMode: 'default' | 'disabled' | 'live'
+    approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+    approvalsReviewer: 'default' | 'user' | 'auto_review'
     autoArchiveEmpty: boolean
   },
 ): Promise<UiAutomation> {

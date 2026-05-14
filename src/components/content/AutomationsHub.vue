@@ -89,6 +89,7 @@
                 {{ formatDateTime(selectedRun.startedAtIso) }}
                 <template v-if="selectedRun.completedAtIso">- {{ formatDateTime(selectedRun.completedAtIso) }}</template>
                 · {{ selectedRun.effectiveRunMode }} · {{ selectedRun.model || defaults.model || 'default' }}
+                · {{ usageLabel(selectedRun) }}
               </p>
             </div>
             <div class="automations-hub-inline-actions">
@@ -116,6 +117,25 @@
           <p v-if="selectedRun.error" class="automations-hub-callout is-error">{{ selectedRun.error }}</p>
           <p v-else-if="selectedRun.archived" class="automations-hub-callout">Auto-archived because the run did not report notable findings.</p>
 
+          <div class="automations-hub-chip-row">
+            <span v-if="selectedRun.threadId" class="automations-hub-chip">thread: {{ selectedRun.threadId }}</span>
+            <span v-if="selectedRun.resumedThreadId" class="automations-hub-chip">resumed: {{ selectedRun.resumedThreadId }}</span>
+            <span class="automations-hub-chip">approval: {{ selectedRun.approvalPolicy }}</span>
+            <span class="automations-hub-chip">reviewer: {{ selectedRun.approvalsReviewer }}</span>
+            <span class="automations-hub-chip">web: {{ selectedRun.webSearchMode }}</span>
+          </div>
+
+          <div v-if="selectedRun.items.length > 0" class="automations-hub-event-list">
+            <article v-for="item in selectedRun.items" :key="item.id" class="automations-hub-event">
+              <div class="automations-hub-event-top">
+                <span class="automations-hub-event-title">{{ item.title }}</span>
+                <span class="automations-hub-chip">{{ item.type }} · {{ item.status || 'done' }}</span>
+              </div>
+              <div v-if="item.body" class="automations-hub-event-body" v-html="renderAutomationMarkdown(item.body)" />
+            </article>
+          </div>
+
+          <pre v-if="selectedRunStructuredJson" class="automations-hub-structured-output">{{ selectedRunStructuredJson }}</pre>
           <div class="automations-hub-output" v-html="renderAutomationMarkdown(selectedRun.finalMessage || 'No final message recorded yet.')" />
         </template>
         <div v-else class="automations-hub-empty">Select a triage item to inspect the latest run output.</div>
@@ -193,6 +213,16 @@
               class="automations-hub-textarea"
               rows="8"
               placeholder="Review incoming pull requests and report only issues that need attention."
+            />
+          </label>
+
+          <label class="automations-hub-field">
+            <span class="automations-hub-label">Output schema</span>
+            <textarea
+              v-model="form.outputSchema"
+              class="automations-hub-textarea automations-hub-textarea--compact"
+              rows="5"
+              placeholder='{"type":"object","properties":{"summary":{"type":"string"},"status":{"type":"string","enum":["clear","findings","action_required"]}},"required":["summary","status"],"additionalProperties":false}'
             />
           </label>
 
@@ -286,6 +316,68 @@
             </div>
           </div>
 
+          <div class="automations-hub-field-grid">
+            <label class="automations-hub-field">
+              <span class="automations-hub-label">Web search</span>
+              <ComposerDropdown
+                class="automations-hub-dropdown"
+                :model-value="form.webSearchMode"
+                :options="webSearchOptions"
+                placeholder="Web search"
+                @update:model-value="onWebSearchModeSelect"
+              />
+            </label>
+
+            <label class="automations-hub-field">
+              <span class="automations-hub-label">Approval policy</span>
+              <ComposerDropdown
+                class="automations-hub-dropdown"
+                :model-value="form.approvalPolicy"
+                :options="approvalPolicyOptions"
+                placeholder="Approval policy"
+                @update:model-value="onApprovalPolicySelect"
+              />
+            </label>
+          </div>
+
+          <label class="automations-hub-field">
+            <span class="automations-hub-label">Approval reviewer</span>
+            <ComposerDropdown
+              class="automations-hub-dropdown"
+              :model-value="form.approvalsReviewer"
+              :options="approvalsReviewerOptions"
+              placeholder="Approval reviewer"
+              @update:model-value="onApprovalsReviewerSelect"
+            />
+          </label>
+
+          <div class="automations-hub-switch-grid">
+            <label class="automations-hub-switch">
+              <input v-model="form.resumeThread" type="checkbox" />
+              <span>Resume the previous thread for each project.</span>
+            </label>
+
+            <label class="automations-hub-switch">
+              <input v-model="form.ephemeral" type="checkbox" />
+              <span>Run without persisting Codex session files.</span>
+            </label>
+
+            <label class="automations-hub-switch">
+              <input v-model="form.ignoreUserConfig" type="checkbox" />
+              <span>Ignore user config for this run.</span>
+            </label>
+
+            <label class="automations-hub-switch">
+              <input v-model="form.ignoreRules" type="checkbox" />
+              <span>Ignore exec policy rules for this run.</span>
+            </label>
+
+            <label class="automations-hub-switch">
+              <input v-model="form.networkAccess" type="checkbox" />
+              <span>Enable workspace-write network access.</span>
+            </label>
+          </div>
+
           <label class="automations-hub-switch">
             <input v-model="form.autoArchiveEmpty" type="checkbox" />
             <span>Archive runs automatically when the result looks empty or “nothing to report”.</span>
@@ -377,6 +469,15 @@ const form = reactive({
   model: '',
   reasoningEffort: '' as ReasoningEffort | '',
   sandboxMode: 'default' as 'default' | 'read-only' | 'workspace-write' | 'danger-full-access',
+  outputSchema: '',
+  resumeThread: false,
+  ephemeral: false,
+  ignoreUserConfig: false,
+  ignoreRules: false,
+  networkAccess: false,
+  webSearchMode: 'default' as 'default' | 'disabled' | 'live',
+  approvalPolicy: 'default' as 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted',
+  approvalsReviewer: 'default' as 'default' | 'user' | 'auto_review',
   autoArchiveEmpty: true,
 })
 
@@ -397,6 +498,26 @@ const sandboxOptions = [
   { value: 'read-only', label: 'Read-only' },
   { value: 'workspace-write', label: 'Workspace write' },
   { value: 'danger-full-access', label: 'Danger full access' },
+]
+
+const webSearchOptions = [
+  { value: 'default', label: 'Use defaults' },
+  { value: 'disabled', label: 'Disabled' },
+  { value: 'live', label: 'Live' },
+]
+
+const approvalPolicyOptions = [
+  { value: 'default', label: 'Use exec default' },
+  { value: 'never', label: 'Never' },
+  { value: 'on-request', label: 'On request' },
+  { value: 'on-failure', label: 'On failure' },
+  { value: 'untrusted', label: 'Untrusted' },
+]
+
+const approvalsReviewerOptions = [
+  { value: 'default', label: 'Use defaults' },
+  { value: 'user', label: 'User' },
+  { value: 'auto_review', label: 'Auto review' },
 ]
 
 const effectiveModelId = computed(() => form.model || defaults.value.model || '')
@@ -447,6 +568,16 @@ const selectedRun = computed(() =>
     ?? filteredRuns.value[0]
     ?? null,
 )
+
+const selectedRunStructuredJson = computed(() => {
+  const value = selectedRun.value?.structuredResult
+  if (value === null || value === undefined) return ''
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return ''
+  }
+})
 
 type AutomationMarkdownBlock =
   | { kind: 'paragraph'; value: string }
@@ -612,6 +743,15 @@ function resetForm(): void {
   form.model = ''
   form.reasoningEffort = ''
   form.sandboxMode = 'default'
+  form.outputSchema = ''
+  form.resumeThread = false
+  form.ephemeral = false
+  form.ignoreUserConfig = false
+  form.ignoreRules = false
+  form.networkAccess = false
+  form.webSearchMode = 'default'
+  form.approvalPolicy = 'default'
+  form.approvalsReviewer = 'default'
   form.autoArchiveEmpty = true
   hasInitializedCreateForm = true
 }
@@ -629,6 +769,15 @@ function hydrateForm(automation: UiAutomation): void {
   form.model = automation.model
   form.reasoningEffort = automation.reasoningEffort as ReasoningEffort | ''
   form.sandboxMode = automation.sandboxMode
+  form.outputSchema = automation.outputSchema
+  form.resumeThread = automation.resumeThread
+  form.ephemeral = automation.ephemeral
+  form.ignoreUserConfig = automation.ignoreUserConfig
+  form.ignoreRules = automation.ignoreRules
+  form.networkAccess = automation.networkAccess
+  form.webSearchMode = automation.webSearchMode
+  form.approvalPolicy = automation.approvalPolicy
+  form.approvalsReviewer = automation.approvalsReviewer
   form.autoArchiveEmpty = automation.autoArchiveEmpty
 }
 
@@ -683,6 +832,22 @@ function onSandboxModeSelect(value: string): void {
     return
   }
   form.sandboxMode = 'default'
+}
+
+function onWebSearchModeSelect(value: string): void {
+  form.webSearchMode = value === 'disabled' || value === 'live' ? value : 'default'
+}
+
+function onApprovalPolicySelect(value: string): void {
+  if (value === 'never' || value === 'on-request' || value === 'on-failure' || value === 'untrusted') {
+    form.approvalPolicy = value
+    return
+  }
+  form.approvalPolicy = 'default'
+}
+
+function onApprovalsReviewerSelect(value: string): void {
+  form.approvalsReviewer = value === 'user' || value === 'auto_review' ? value : 'default'
 }
 
 function onReasoningEffortSelect(value: string): void {
@@ -741,6 +906,15 @@ async function saveAutomation(): Promise<void> {
       model: form.model,
       reasoningEffort: form.reasoningEffort,
       sandboxMode: form.sandboxMode,
+      outputSchema: form.outputSchema,
+      resumeThread: form.resumeThread,
+      ephemeral: form.ephemeral,
+      ignoreUserConfig: form.ignoreUserConfig,
+      ignoreRules: form.ignoreRules,
+      networkAccess: form.networkAccess,
+      webSearchMode: form.webSearchMode,
+      approvalPolicy: form.approvalPolicy,
+      approvalsReviewer: form.approvalsReviewer,
       autoArchiveEmpty: form.autoArchiveEmpty,
     }
     if (editingId.value) {
@@ -842,6 +1016,12 @@ function formatRelative(value: string): string {
   if (Math.abs(totalHours) < 48) return `${totalHours}h`
   const totalDays = Math.round(totalHours / 24)
   return `${totalDays}d`
+}
+
+function usageLabel(run: UiAutomationRun): string {
+  if (!run.usage) return 'usage pending'
+  const total = run.usage.inputTokens + run.usage.outputTokens
+  return `${total.toLocaleString()} tokens`
 }
 
 function runStatusLabel(run: UiAutomationRun): string {
@@ -1094,6 +1274,38 @@ onBeforeUnmount(() => {
   @apply min-h-[26rem] flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm leading-6 text-zinc-800;
 }
 
+.automations-hub-structured-output {
+  @apply max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-950 px-3 py-2 font-mono text-xs leading-5 text-zinc-100;
+}
+
+.automations-hub-event-list {
+  @apply flex max-h-96 flex-col gap-2 overflow-y-auto pr-1;
+}
+
+.automations-hub-event {
+  @apply rounded-lg border border-zinc-200 bg-zinc-50 p-3;
+}
+
+.automations-hub-event-top {
+  @apply flex flex-wrap items-center justify-between gap-2;
+}
+
+.automations-hub-event-title {
+  @apply text-sm font-semibold text-zinc-900;
+}
+
+.automations-hub-event-body {
+  @apply mt-2 max-h-48 overflow-auto text-sm leading-6 text-zinc-700;
+}
+
+.automations-hub-event-body :deep(p) {
+  @apply my-2 whitespace-pre-wrap first:mt-0 last:mb-0;
+}
+
+.automations-hub-event-body :deep(pre) {
+  @apply my-2 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs leading-6 text-zinc-100;
+}
+
 .automations-hub-output :deep(h2),
 .automations-hub-output :deep(h3) {
   @apply mb-2 mt-4 text-base font-semibold text-zinc-950 first:mt-0;
@@ -1177,6 +1389,10 @@ onBeforeUnmount(() => {
   @apply resize-y leading-6;
 }
 
+.automations-hub-textarea--compact {
+  @apply font-mono text-xs leading-5;
+}
+
 .automations-hub-picker,
 .automations-hub-dropdown {
   @apply rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2;
@@ -1184,6 +1400,10 @@ onBeforeUnmount(() => {
 
 .automations-hub-switch {
   @apply flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700;
+}
+
+.automations-hub-switch-grid {
+  @apply grid gap-2 md:grid-cols-2;
 }
 
 .automations-hub-switch input {

@@ -17,8 +17,26 @@ type ReadJsonBody = (req: IncomingMessage) => Promise<unknown>
 type AutomationSchedulePreset = 'hourly' | 'daily' | 'weekly' | 'custom'
 type AutomationRunMode = 'local' | 'worktree'
 type AutomationSandboxMode = 'default' | 'read-only' | 'workspace-write' | 'danger-full-access'
+type AutomationWebSearchMode = 'default' | 'disabled' | 'live'
+type AutomationApprovalPolicy = 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+type AutomationApprovalsReviewer = 'default' | 'user' | 'auto_review'
 type AutomationStatus = 'idle' | 'running' | 'succeeded' | 'failed'
 type AutomationRunStatus = 'running' | 'completed' | 'failed' | 'archived'
+
+type AutomationUsage = {
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  reasoningOutputTokens: number
+}
+
+type AutomationRunItem = {
+  id: string
+  type: string
+  title: string
+  status: string
+  body: string
+}
 
 type AutomationRecord = {
   id: string
@@ -33,6 +51,15 @@ type AutomationRecord = {
   model: string
   reasoningEffort: string
   sandboxMode: AutomationSandboxMode
+  outputSchema: string
+  resumeThread: boolean
+  ephemeral: boolean
+  ignoreUserConfig: boolean
+  ignoreRules: boolean
+  networkAccess: boolean
+  webSearchMode: AutomationWebSearchMode
+  approvalPolicy: AutomationApprovalPolicy
+  approvalsReviewer: AutomationApprovalsReviewer
   autoArchiveEmpty: boolean
   createdAtIso: string
   updatedAtIso: string
@@ -65,6 +92,13 @@ type AutomationRunRecord = {
   model: string
   reasoningEffort: string
   sandboxMode: string
+  webSearchMode: AutomationWebSearchMode
+  approvalPolicy: AutomationApprovalPolicy
+  approvalsReviewer: AutomationApprovalsReviewer
+  resumedThreadId: string
+  usage: AutomationUsage | null
+  items: AutomationRunItem[]
+  structuredResult: unknown | null
   hasFindings: boolean
 }
 
@@ -156,6 +190,20 @@ function normalizeSandboxMode(value: unknown): AutomationSandboxMode {
     : 'default'
 }
 
+function normalizeWebSearchMode(value: unknown): AutomationWebSearchMode {
+  return value === 'disabled' || value === 'live' || value === 'default' ? value : 'default'
+}
+
+function normalizeApprovalPolicy(value: unknown): AutomationApprovalPolicy {
+  return value === 'never' || value === 'on-request' || value === 'on-failure' || value === 'untrusted' || value === 'default'
+    ? value
+    : 'default'
+}
+
+function normalizeApprovalsReviewer(value: unknown): AutomationApprovalsReviewer {
+  return value === 'user' || value === 'auto_review' || value === 'default' ? value : 'default'
+}
+
 function normalizeAutomationStatus(value: unknown): AutomationStatus {
   return value === 'running' || value === 'succeeded' || value === 'failed' ? value : 'idle'
 }
@@ -187,6 +235,15 @@ function normalizeAutomationRecord(value: unknown): AutomationRecord | null {
     model: readString(record.model),
     reasoningEffort: readString(record.reasoningEffort),
     sandboxMode: normalizeSandboxMode(record.sandboxMode),
+    outputSchema: typeof record.outputSchema === 'string' ? record.outputSchema : '',
+    resumeThread: readBoolean(record.resumeThread, false),
+    ephemeral: readBoolean(record.ephemeral, false),
+    ignoreUserConfig: readBoolean(record.ignoreUserConfig, false),
+    ignoreRules: readBoolean(record.ignoreRules, false),
+    networkAccess: readBoolean(record.networkAccess, false),
+    webSearchMode: normalizeWebSearchMode(record.webSearchMode),
+    approvalPolicy: normalizeApprovalPolicy(record.approvalPolicy),
+    approvalsReviewer: normalizeApprovalsReviewer(record.approvalsReviewer),
     autoArchiveEmpty: readBoolean(record.autoArchiveEmpty, true),
     createdAtIso: readString(record.createdAtIso) || nowIso(),
     updatedAtIso: readString(record.updatedAtIso) || nowIso(),
@@ -230,8 +287,55 @@ function normalizeAutomationRunRecord(value: unknown): AutomationRunRecord | nul
     model: readString(record.model),
     reasoningEffort: readString(record.reasoningEffort),
     sandboxMode: readString(record.sandboxMode),
+    webSearchMode: normalizeWebSearchMode(record.webSearchMode),
+    approvalPolicy: normalizeApprovalPolicy(record.approvalPolicy),
+    approvalsReviewer: normalizeApprovalsReviewer(record.approvalsReviewer),
+    resumedThreadId: readString(record.resumedThreadId),
+    usage: normalizeUsage(record.usage),
+    items: normalizeRunItems(record.items),
+    structuredResult: normalizeStructuredResult(record.structuredResult),
     hasFindings: readBoolean(record.hasFindings, false),
   }
+}
+
+function normalizeUsage(value: unknown): AutomationUsage | null {
+  const record = asRecord(value)
+  if (!record) return null
+  return {
+    inputTokens: readFiniteNumber(record.inputTokens),
+    cachedInputTokens: readFiniteNumber(record.cachedInputTokens),
+    outputTokens: readFiniteNumber(record.outputTokens),
+    reasoningOutputTokens: readFiniteNumber(record.reasoningOutputTokens),
+  }
+}
+
+function readFiniteNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function normalizeRunItems(value: unknown): AutomationRunItem[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      const record = asRecord(entry)
+      if (!record) return null
+      const id = readString(record.id)
+      const type = readString(record.type)
+      const title = readString(record.title)
+      if (!id || !type || !title) return null
+      return {
+        id,
+        type,
+        title,
+        status: readString(record.status),
+        body: typeof record.body === 'string' ? record.body : '',
+      }
+    })
+    .filter((entry): entry is AutomationRunItem => entry !== null)
+}
+
+function normalizeStructuredResult(value: unknown): unknown | null {
+  return value === undefined ? null : value
 }
 
 function normalizeStore(value: unknown): AutomationStore {
@@ -281,7 +385,12 @@ function trimRunSummary(value: string): string {
   return `${firstLine.slice(0, 137)}...`
 }
 
-function detectFindings(finalMessage: string): boolean {
+function detectFindings(finalMessage: string, structuredResult: unknown | null): boolean {
+  const structuredStatus = readStructuredStatus(structuredResult)
+  if (structuredStatus) {
+    return structuredStatus === 'findings' || structuredStatus === 'action_required' || structuredStatus === 'failed'
+  }
+
   const normalized = finalMessage.trim().toLowerCase()
   if (!normalized) return false
   const neutralPatterns = [
@@ -295,6 +404,148 @@ function detectFindings(finalMessage: string): boolean {
     'looks good',
   ]
   return !neutralPatterns.some((pattern) => normalized.includes(pattern))
+}
+
+function readStructuredStatus(value: unknown | null): string {
+  const record = asRecord(value)
+  if (!record) return ''
+  const status = readString(record.status).toLowerCase()
+  if (status) return status
+  const hasFindings = record.hasFindings ?? record.has_findings
+  if (typeof hasFindings === 'boolean') return hasFindings ? 'findings' : 'clear'
+  const findings = record.findings
+  if (Array.isArray(findings)) return findings.length > 0 ? 'findings' : 'clear'
+  return ''
+}
+
+function parseStructuredResult(finalMessage: string): unknown | null {
+  const trimmed = finalMessage.trim()
+  if (!trimmed) return null
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return null
+  }
+}
+
+function structuredSummary(value: unknown | null): string {
+  const record = asRecord(value)
+  if (!record) return ''
+  return readString(record.summary) || readString(record.title) || readString(record.message)
+}
+
+function usageFromEvent(value: unknown): AutomationUsage | null {
+  const record = asRecord(value)
+  const usage = asRecord(record?.usage)
+  if (!usage) return null
+  return {
+    inputTokens: readFiniteNumber(usage.input_tokens),
+    cachedInputTokens: readFiniteNumber(usage.cached_input_tokens),
+    outputTokens: readFiniteNumber(usage.output_tokens),
+    reasoningOutputTokens: readFiniteNumber(usage.reasoning_output_tokens),
+  }
+}
+
+function summarizeJsonValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value === null || value === undefined) return ''
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
+}
+
+function formatRunItem(rawItem: unknown, eventType: string): AutomationRunItem | null {
+  const item = asRecord(rawItem)
+  if (!item) return null
+  const id = readString(item.id) || createId('item')
+  const type = readString(item.type) || 'unknown'
+  const status = readString(item.status) || (eventType === 'item.completed' ? 'completed' : eventType === 'item.updated' ? 'updated' : 'in_progress')
+
+  if (type === 'agent_message') {
+    return { id, type, title: 'Agent message', status, body: typeof item.text === 'string' ? item.text : '' }
+  }
+  if (type === 'reasoning') {
+    return { id, type, title: 'Reasoning', status, body: typeof item.text === 'string' ? item.text : '' }
+  }
+  if (type === 'command_execution') {
+    const command = readString(item.command)
+    const output = typeof item.aggregated_output === 'string' ? item.aggregated_output : ''
+    const exitCode = typeof item.exit_code === 'number' ? `exit ${String(item.exit_code)}` : ''
+    return { id, type, title: command || 'Command', status: readString(item.status) || status, body: [exitCode, output].filter(Boolean).join('\n') }
+  }
+  if (type === 'file_change') {
+    const changes = Array.isArray(item.changes)
+      ? item.changes.map((change) => {
+        const record = asRecord(change)
+        return [readString(record?.kind), readString(record?.path)].filter(Boolean).join(' ')
+      }).filter(Boolean)
+      : []
+    return { id, type, title: 'File changes', status: readString(item.status) || status, body: changes.join('\n') }
+  }
+  if (type === 'mcp_tool_call') {
+    const title = [readString(item.server), readString(item.tool)].filter(Boolean).join(' / ') || 'MCP tool'
+    const body = item.error ? summarizeJsonValue(item.error) : summarizeJsonValue(item.result || item.arguments)
+    return { id, type, title, status: readString(item.status) || status, body }
+  }
+  if (type === 'collab_tool_call') {
+    return { id, type, title: readString(item.tool) || 'Collab tool', status: readString(item.status) || status, body: summarizeJsonValue(item.agents_states || item.prompt) }
+  }
+  if (type === 'web_search') {
+    return { id, type, title: 'Web search', status, body: [readString(item.query), summarizeJsonValue(item.action)].filter(Boolean).join('\n') }
+  }
+  if (type === 'todo_list') {
+    const todos = Array.isArray(item.items)
+      ? item.items.map((todo) => {
+        const record = asRecord(todo)
+        const marker = record?.completed === true ? '[x]' : '[ ]'
+        return `${marker} ${readString(record?.text)}`
+      }).filter((todo) => todo.trim() !== '[ ]' && todo.trim() !== '[x]')
+      : []
+    return { id, type, title: 'Todo list', status, body: todos.join('\n') }
+  }
+  if (type === 'error') {
+    return { id, type, title: 'Error', status, body: readString(item.message) }
+  }
+  return { id, type, title: type.replace(/_/g, ' '), status, body: summarizeJsonValue(item) }
+}
+
+function collectExecEvent(event: unknown, state: {
+  threadId: string
+  usage: AutomationUsage | null
+  itemsById: Map<string, AutomationRunItem>
+  finalMessage: string
+  turnFailure: string
+}): void {
+  const record = asRecord(event)
+  if (!record) return
+  const type = readString(record.type)
+  if (type === 'thread.started' && !state.threadId) {
+    state.threadId = readString(record.thread_id)
+    return
+  }
+  if (type === 'turn.completed') {
+    state.usage = usageFromEvent(record)
+    return
+  }
+  if (type === 'turn.failed') {
+    const error = asRecord(record.error)
+    state.turnFailure = readString(error?.message) || readString(record.message) || 'Automation turn failed'
+    return
+  }
+  if (type === 'error') {
+    state.turnFailure = readString(record.message) || 'Automation event stream failed'
+    return
+  }
+  if (type === 'item.started' || type === 'item.updated' || type === 'item.completed') {
+    const runItem = formatRunItem(record.item, type)
+    if (!runItem) return
+    state.itemsById.set(runItem.id, runItem)
+    if (type === 'item.completed' && runItem.type === 'agent_message') {
+      state.finalMessage = runItem.body
+    }
+  }
 }
 
 async function readStore(): Promise<AutomationStore> {
@@ -443,19 +694,31 @@ class AutomationManager {
     }
   }
 
-  private buildRunPaths(runId: string): { runDir: string; outputPath: string; eventLogPath: string } {
+  private buildRunPaths(runId: string): { runDir: string; outputPath: string; eventLogPath: string; outputSchemaPath: string } {
     const runDir = join(getAutomationRunsDir(), runId)
     return {
       runDir,
       outputPath: join(runDir, 'last-message.txt'),
       eventLogPath: join(runDir, 'events.jsonl'),
+      outputSchemaPath: join(runDir, 'output-schema.json'),
     }
+  }
+
+  private findResumeThreadId(automationId: string, projectPath: string): string {
+    const previousRun = this.store.runs.find((run) => (
+      run.automationId === automationId
+      && run.projectPath === projectPath
+      && run.threadId
+      && run.status !== 'failed'
+    ))
+    return previousRun?.threadId ?? ''
   }
 
   private async createRunRecord(
     automation: AutomationRecord,
     projectPath: string,
     defaults: AutomationDefaults,
+    resumedThreadId: string,
   ): Promise<AutomationRunRecord> {
     const runId = createId('run')
     const { runDir, outputPath, eventLogPath } = this.buildRunPaths(runId)
@@ -493,6 +756,13 @@ class AutomationManager {
       sandboxMode: automation.sandboxMode === 'default'
         ? (defaults.sandboxMode || 'workspace-write')
         : automation.sandboxMode,
+      webSearchMode: automation.webSearchMode,
+      approvalPolicy: automation.approvalPolicy,
+      approvalsReviewer: automation.approvalsReviewer,
+      resumedThreadId,
+      usage: null,
+      items: [],
+      structuredResult: null,
       hasFindings: false,
     }
   }
@@ -505,6 +775,7 @@ class AutomationManager {
 
   private async executeRun(automation: AutomationRecord, runRecord: AutomationRunRecord): Promise<void> {
     const prompt = buildPromptWithSkills(automation.prompt, automation.skillNames)
+    const { outputSchemaPath } = this.buildRunPaths(runRecord.id)
     const args = ['exec', '--json', '--skip-git-repo-check', '-C', runRecord.cwd, '-o', runRecord.outputPath]
 
     if (runRecord.model) {
@@ -516,12 +787,47 @@ class AutomationManager {
     if (runRecord.reasoningEffort) {
       args.push('-c', `model_reasoning_effort="${runRecord.reasoningEffort}"`)
     }
-    args.push('-')
+    if (automation.outputSchema.trim()) {
+      await writeFile(outputSchemaPath, automation.outputSchema.trim(), 'utf8')
+      args.push('--output-schema', outputSchemaPath)
+    }
+    if (automation.ephemeral) {
+      args.push('--ephemeral')
+    }
+    if (automation.ignoreUserConfig) {
+      args.push('--ignore-user-config')
+    }
+    if (automation.ignoreRules) {
+      args.push('--ignore-rules')
+    }
+    if (automation.networkAccess) {
+      args.push('-c', 'sandbox_workspace_write.network_access=true')
+    }
+    if (automation.webSearchMode !== 'default') {
+      args.push('-c', `web_search="${automation.webSearchMode}"`)
+    }
+    if (automation.approvalPolicy !== 'default') {
+      args.push('-c', `approval_policy="${automation.approvalPolicy}"`)
+    }
+    if (automation.approvalsReviewer !== 'default') {
+      args.push('-c', `approvals_reviewer="${automation.approvalsReviewer}"`)
+    }
+    if (runRecord.resumedThreadId) {
+      args.push('resume', runRecord.resumedThreadId, '-')
+    } else {
+      args.push('-')
+    }
 
     const eventStream = createWriteStream(runRecord.eventLogPath, { flags: 'w' })
     let stdoutBuffer = ''
     let stderrBuffer = ''
-    let threadId = ''
+    const eventState = {
+      threadId: runRecord.resumedThreadId,
+      usage: null as AutomationUsage | null,
+      itemsById: new Map<string, AutomationRunItem>(),
+      finalMessage: '',
+      turnFailure: '',
+    }
 
     const exitCode = await new Promise<number | null>((resolvePromise, reject) => {
       const proc = spawn('codex', args, {
@@ -543,10 +849,7 @@ class AutomationManager {
         for (const line of lines) {
           if (!line.trim()) continue
           try {
-            const event = JSON.parse(line) as { type?: string; thread_id?: string }
-            if (event.type === 'thread.started' && typeof event.thread_id === 'string' && !threadId) {
-              threadId = event.thread_id
-            }
+            collectExecEvent(JSON.parse(line) as unknown, eventState)
           } catch {
             // Keep the event log verbatim even if parsing fails.
           }
@@ -558,6 +861,13 @@ class AutomationManager {
       })
 
       proc.on('close', (code) => {
+        if (stdoutBuffer.trim()) {
+          try {
+            collectExecEvent(JSON.parse(stdoutBuffer) as unknown, eventState)
+          } catch {
+            // Keep the event log verbatim even if parsing fails.
+          }
+        }
         eventStream.end()
         resolvePromise(code)
       })
@@ -569,33 +879,40 @@ class AutomationManager {
     } catch {
       finalMessage = ''
     }
+    finalMessage = eventState.finalMessage || finalMessage
+    const structuredResult = parseStructuredResult(finalMessage)
 
-    const errorText = exitCode === 0
+    const runFailed = exitCode !== 0 || Boolean(eventState.turnFailure)
+    const errorText = !runFailed
       ? ''
-      : trimRunSummary(stderrBuffer.trim()) || 'Automation run failed'
-    const hasFindings = exitCode === 0 && detectFindings(finalMessage)
-    const archived = exitCode === 0 && automation.autoArchiveEmpty && !hasFindings
+      : eventState.turnFailure || trimRunSummary(stderrBuffer.trim()) || 'Automation run failed'
+    const hasFindings = !runFailed && detectFindings(finalMessage, structuredResult)
+    const archived = !runFailed && automation.autoArchiveEmpty && !hasFindings
+    const summary = !runFailed
+      ? structuredSummary(structuredResult) || trimRunSummary(finalMessage) || (hasFindings ? 'Automation finished with findings' : 'Automation finished without notable findings')
+      : errorText
 
     const completedRun: AutomationRunRecord = {
       ...runRecord,
-      threadId,
+      threadId: eventState.threadId,
       completedAtIso: nowIso(),
       finalMessage,
       error: errorText,
+      usage: eventState.usage,
+      items: [...eventState.itemsById.values()],
+      structuredResult,
       hasFindings,
-      unread: exitCode === 0 ? hasFindings : true,
+      unread: runFailed ? true : hasFindings,
       archived,
-      status: archived ? 'archived' : exitCode === 0 ? 'completed' : 'failed',
-      summary: exitCode === 0
-        ? trimRunSummary(finalMessage) || (hasFindings ? 'Automation finished with findings' : 'Automation finished without notable findings')
-        : errorText,
+      status: archived ? 'archived' : runFailed ? 'failed' : 'completed',
+      summary,
     }
 
     this.store.runs = this.store.runs.map((run) => run.id === runRecord.id ? completedRun : run)
     this.updateAutomationAfterRun(automation.id, {
       lastRunAtIso: completedRun.startedAtIso,
-      lastSuccessAtIso: exitCode === 0 ? completedRun.completedAtIso : automation.lastSuccessAtIso,
-      lastStatus: exitCode === 0 ? 'succeeded' : 'failed',
+      lastSuccessAtIso: runFailed ? automation.lastSuccessAtIso : completedRun.completedAtIso,
+      lastStatus: runFailed ? 'failed' : 'succeeded',
       lastError: errorText,
     })
     this.sortState()
@@ -614,6 +931,15 @@ class AutomationManager {
     model: string
     reasoningEffort: string
     sandboxMode: AutomationSandboxMode
+    outputSchema: string
+    resumeThread: boolean
+    ephemeral: boolean
+    ignoreUserConfig: boolean
+    ignoreRules: boolean
+    networkAccess: boolean
+    webSearchMode: AutomationWebSearchMode
+    approvalPolicy: AutomationApprovalPolicy
+    approvalsReviewer: AutomationApprovalsReviewer
     autoArchiveEmpty: boolean
   } {
     const record = asRecord(input)
@@ -632,6 +958,14 @@ class AutomationManager {
     if (projectPaths.length === 0) throw new Error('Select at least one project')
     if (!cronExpression) throw new Error('Schedule is required')
     if (!computeNextRunAtIso(cronExpression)) throw new Error('Invalid cron expression')
+    const outputSchema = typeof record.outputSchema === 'string' ? record.outputSchema.trim() : ''
+    if (outputSchema) {
+      try {
+        JSON.parse(outputSchema) as unknown
+      } catch {
+        throw new Error('Output schema must be valid JSON')
+      }
+    }
 
     return {
       title,
@@ -645,6 +979,15 @@ class AutomationManager {
       model: readString(record.model),
       reasoningEffort: readString(record.reasoningEffort),
       sandboxMode: normalizeSandboxMode(record.sandboxMode),
+      outputSchema,
+      resumeThread: readBoolean(record.resumeThread, false),
+      ephemeral: readBoolean(record.ephemeral, false),
+      ignoreUserConfig: readBoolean(record.ignoreUserConfig, false),
+      ignoreRules: readBoolean(record.ignoreRules, false),
+      networkAccess: readBoolean(record.networkAccess, false),
+      webSearchMode: normalizeWebSearchMode(record.webSearchMode),
+      approvalPolicy: normalizeApprovalPolicy(record.approvalPolicy),
+      approvalsReviewer: normalizeApprovalsReviewer(record.approvalsReviewer),
       autoArchiveEmpty: readBoolean(record.autoArchiveEmpty, true),
     }
   }
@@ -782,7 +1125,8 @@ class AutomationManager {
       await this.persist()
 
       for (const projectPath of automation.projectPaths) {
-        const runRecord = await this.createRunRecord(automation, projectPath, defaults)
+        const resumedThreadId = automation.resumeThread ? this.findResumeThreadId(automation.id, projectPath) : ''
+        const runRecord = await this.createRunRecord(automation, projectPath, defaults, resumedThreadId)
         this.store.runs.unshift(runRecord)
         this.sortState()
         await this.persist()
