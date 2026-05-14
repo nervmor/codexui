@@ -417,7 +417,6 @@ const tabs = [
 
 const triageFilters = [
   { value: 'unread', label: 'Unread' },
-  { value: 'active', label: 'Needs attention' },
   { value: 'all', label: 'All' },
   { value: 'archived', label: 'Archived' },
 ] as const
@@ -538,9 +537,6 @@ const skillDropdownOptions = computed(() =>
 const filteredRuns = computed(() => {
   if (triageFilter.value === 'unread') {
     return runs.value.filter((run) => run.unread)
-  }
-  if (triageFilter.value === 'active') {
-    return runs.value.filter((run) => !run.archived && (run.status === 'failed' || run.hasFindings || run.unread))
   }
   if (triageFilter.value === 'archived') {
     return runs.value.filter((run) => run.archived)
