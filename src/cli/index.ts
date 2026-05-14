@@ -12,6 +12,7 @@ import { Command } from 'commander'
 import qrcode from 'qrcode-terminal'
 import { createServer as createApp } from '../server/httpServer.js'
 import { generatePassword } from '../server/password.js'
+import { readCodexuiRunMode } from '../server/runtimeMode.js'
 
 const program = new Command().name('codexui').description('Web interface for Codex app-server')
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -460,6 +461,7 @@ async function addProjectOnly(projectPath: string): Promise<void> {
 
 async function startServer(options: { port: string; password: string | boolean; tunnel: boolean; projectPath?: string }) {
   const version = await readCliVersion()
+  const runMode = readCodexuiRunMode()
   const projectPath = options.projectPath?.trim() ?? ''
   if (projectPath.length > 0) {
     try {
@@ -502,6 +504,7 @@ async function startServer(options: { port: string; password: string | boolean; 
     '',
     'Codex Web Local is running!',
     `  Version:  ${version}`,
+    `  Mode:     ${runMode}`,
     '  npm:      https://www.npmjs.com/package/@nervmor/codexui',
     '',
     `  Bind:     http://0.0.0.0:${String(port)}`,

@@ -20,7 +20,7 @@
         <button class="automations-hub-button" type="button" :disabled="loading" @click="refreshAll">
           {{ loading ? 'Refreshing…' : 'Refresh' }}
         </button>
-        <button class="automations-hub-button is-primary" type="button" @click="startCreate">
+        <button v-if="!automationReadOnly" class="automations-hub-button is-primary" type="button" @click="startCreate">
           New automation
         </button>
       </div>
@@ -90,6 +90,7 @@
                 v-if="selectedRun.unread"
                 class="automations-hub-inline-link"
                 type="button"
+                :disabled="automationReadOnly"
                 @click="markRunRead(selectedRun.id)"
               >
                 Mark read
@@ -97,6 +98,7 @@
               <button
                 class="automations-hub-inline-link"
                 type="button"
+                :disabled="automationReadOnly"
                 @click="setRunArchived(selectedRun.id, !selectedRun.archived)"
               >
                 {{ selectedRun.archived ? 'Restore' : 'Archive' }}
@@ -160,14 +162,16 @@
               <span v-if="automation.skillNames.length > 0" class="automations-hub-chip">{{ automation.skillNames.length }} skills</span>
             </div>
             <div class="automations-hub-inline-actions">
-              <button class="automations-hub-inline-link" type="button" @click="startEdit(automation)">Edit</button>
-              <button class="automations-hub-inline-link" type="button" :disabled="runningAutomationId === automation.id" @click="triggerRun(automation.id)">
+              <button class="automations-hub-inline-link" type="button" @click="startEdit(automation)">
+                {{ automationReadOnly ? 'View' : 'Edit' }}
+              </button>
+              <button v-if="!automationReadOnly" class="automations-hub-inline-link" type="button" :disabled="runningAutomationId === automation.id" @click="triggerRun(automation.id)">
                 {{ runningAutomationId === automation.id ? 'Running…' : 'Run now' }}
               </button>
-              <button class="automations-hub-inline-link" type="button" @click="toggleAutomation(automation)">
+              <button v-if="!automationReadOnly" class="automations-hub-inline-link" type="button" @click="toggleAutomation(automation)">
                 {{ automation.enabled ? 'Pause' : 'Enable' }}
               </button>
-              <button class="automations-hub-inline-link is-danger" type="button" :disabled="deletingAutomationId === automation.id" @click="removeAutomation(automation.id)">
+              <button v-if="!automationReadOnly" class="automations-hub-inline-link is-danger" type="button" :disabled="deletingAutomationId === automation.id" @click="removeAutomation(automation.id)">
                 {{ deletingAutomationId === automation.id ? 'Deleting…' : 'Delete' }}
               </button>
             </div>
@@ -178,16 +182,16 @@
       <section class="automations-hub-panel automations-hub-panel--detail">
         <div class="automations-hub-section-header">
           <div>
-            <h3 class="automations-hub-section-title">{{ editingId ? 'Edit automation' : 'New automation' }}</h3>
-            <p class="automations-hub-detail-meta">Matches the official app model: recurring background runs with project-scoped context.</p>
+            <h3 class="automations-hub-section-title">{{ automationReadOnly ? 'Automation details' : editingId ? 'Edit automation' : 'New automation' }}</h3>
+            <p class="automations-hub-detail-meta">{{ automationReadOnly ? 'Debug mode is read-only for automations.' : 'Matches the official app model: recurring background runs with project-scoped context.' }}</p>
           </div>
-          <button v-if="editingId" class="automations-hub-inline-link" type="button" @click="startCreate">Create new instead</button>
+          <button v-if="editingId && !automationReadOnly" class="automations-hub-inline-link" type="button" @click="startCreate">Create new instead</button>
         </div>
 
         <div class="automations-hub-form">
           <label class="automations-hub-field">
             <span class="automations-hub-label">Title</span>
-            <input v-model="form.title" class="automations-hub-input" type="text" placeholder="Weekly PR triage" />
+            <input v-model="form.title" class="automations-hub-input" type="text" placeholder="Weekly PR triage" :disabled="automationReadOnly" />
           </label>
 
           <label class="automations-hub-field">
@@ -197,6 +201,7 @@
               class="automations-hub-textarea"
               rows="8"
               placeholder="Review incoming pull requests and report only issues that need attention."
+              :disabled="automationReadOnly"
             />
           </label>
 
@@ -207,6 +212,7 @@
               class="automations-hub-textarea automations-hub-textarea--compact"
               rows="5"
               placeholder='{"type":"object","properties":{"summary":{"type":"string"},"status":{"type":"string","enum":["clear","findings","action_required"]}},"required":["summary","status"],"additionalProperties":false}'
+              :disabled="automationReadOnly"
             />
           </label>
 
@@ -216,6 +222,7 @@
               class="automations-hub-picker"
               :options="projectDropdownOptions"
               :selected-values="form.projectPaths"
+              :disabled="automationReadOnly"
               placeholder="Select projects"
               search-placeholder="Search projects..."
               @toggle="onProjectToggle"
@@ -229,6 +236,7 @@
                 class="automations-hub-dropdown"
                 :model-value="form.runMode"
                 :options="runModeOptions"
+                :disabled="automationReadOnly"
                 placeholder="Run mode"
                 @update:model-value="onRunModeSelect"
               />
@@ -240,6 +248,7 @@
                 class="automations-hub-dropdown"
                 :model-value="form.schedulePreset"
                 :options="presetOptions"
+                :disabled="automationReadOnly"
                 placeholder="Schedule"
                 @update:model-value="onPresetChange"
               />
@@ -248,7 +257,7 @@
 
           <label class="automations-hub-field">
             <span class="automations-hub-label">Cron</span>
-            <input v-model="form.cronExpression" class="automations-hub-input" type="text" placeholder="0 9 * * 1" />
+            <input v-model="form.cronExpression" class="automations-hub-input" type="text" placeholder="0 9 * * 1" :disabled="automationReadOnly" />
           </label>
 
           <div class="automations-hub-field-grid">
@@ -258,6 +267,7 @@
                 class="automations-hub-dropdown"
                 :model-value="form.model"
                 :options="modelOptions"
+                :disabled="automationReadOnly"
                 placeholder="Default model"
                 @update:model-value="onModelSelect"
               />
@@ -269,6 +279,7 @@
                 class="automations-hub-dropdown"
                 :model-value="form.reasoningEffort"
                 :options="reasoningOptions"
+                :disabled="automationReadOnly"
                 placeholder="Default thinking"
                 @update:model-value="onReasoningEffortSelect"
               />
@@ -282,6 +293,7 @@
                 class="automations-hub-dropdown"
                 :model-value="form.sandboxMode"
                 :options="sandboxOptions"
+                :disabled="automationReadOnly"
                 placeholder="Default sandbox"
                 @update:model-value="onSandboxModeSelect"
               />
@@ -293,6 +305,7 @@
                 class="automations-hub-picker"
                 :options="skillDropdownOptions"
                 :selected-values="form.skillNames"
+                :disabled="automationReadOnly"
                 placeholder="Optional skills"
                 search-placeholder="Search skills..."
                 @toggle="onSkillToggle"
@@ -307,6 +320,7 @@
                 class="automations-hub-dropdown"
                 :model-value="form.webSearchMode"
                 :options="webSearchOptions"
+                :disabled="automationReadOnly"
                 placeholder="Web search"
                 @update:model-value="onWebSearchModeSelect"
               />
@@ -318,6 +332,7 @@
                 class="automations-hub-dropdown"
                 :model-value="form.approvalPolicy"
                 :options="approvalPolicyOptions"
+                :disabled="automationReadOnly"
                 placeholder="Approval policy"
                 @update:model-value="onApprovalPolicySelect"
               />
@@ -330,6 +345,7 @@
               class="automations-hub-dropdown"
               :model-value="form.approvalsReviewer"
               :options="approvalsReviewerOptions"
+              :disabled="automationReadOnly"
               placeholder="Approval reviewer"
               @update:model-value="onApprovalsReviewerSelect"
             />
@@ -337,42 +353,42 @@
 
           <div class="automations-hub-switch-grid">
             <label class="automations-hub-switch">
-              <input v-model="form.resumeThread" type="checkbox" />
+              <input v-model="form.resumeThread" type="checkbox" :disabled="automationReadOnly" />
               <span>Resume the previous thread for each project.</span>
             </label>
 
             <label class="automations-hub-switch">
-              <input v-model="form.ephemeral" type="checkbox" />
+              <input v-model="form.ephemeral" type="checkbox" :disabled="automationReadOnly" />
               <span>Run without persisting Codex session files.</span>
             </label>
 
             <label class="automations-hub-switch">
-              <input v-model="form.ignoreUserConfig" type="checkbox" />
+              <input v-model="form.ignoreUserConfig" type="checkbox" :disabled="automationReadOnly" />
               <span>Ignore user config for this run.</span>
             </label>
 
             <label class="automations-hub-switch">
-              <input v-model="form.ignoreRules" type="checkbox" />
+              <input v-model="form.ignoreRules" type="checkbox" :disabled="automationReadOnly" />
               <span>Ignore exec policy rules for this run.</span>
             </label>
 
             <label class="automations-hub-switch">
-              <input v-model="form.networkAccess" type="checkbox" />
+              <input v-model="form.networkAccess" type="checkbox" :disabled="automationReadOnly" />
               <span>Enable workspace-write network access.</span>
             </label>
           </div>
 
           <label class="automations-hub-switch">
-            <input v-model="form.autoArchiveEmpty" type="checkbox" />
+            <input v-model="form.autoArchiveEmpty" type="checkbox" :disabled="automationReadOnly" />
             <span>Archive runs automatically when the result looks empty or “nothing to report”.</span>
           </label>
 
           <label class="automations-hub-switch">
-            <input v-model="form.enabled" type="checkbox" />
+            <input v-model="form.enabled" type="checkbox" :disabled="automationReadOnly" />
             <span>Enable immediately after saving.</span>
           </label>
 
-          <div class="automations-hub-inline-actions">
+          <div v-if="!automationReadOnly" class="automations-hub-inline-actions">
             <button class="automations-hub-button is-primary" type="button" :disabled="saving" @click="saveAutomation">
               {{ saving ? 'Saving…' : editingId ? 'Save automation' : 'Create automation' }}
             </button>
@@ -402,6 +418,7 @@ import {
   setAutomationRunArchived,
   type UiAutomation,
   type UiAutomationDefaults,
+  type UiAutomationRuntime,
   type UiAutomationRun,
   updateAutomation,
 } from '../../api/codexGateway'
@@ -432,6 +449,7 @@ const toast = ref<{ text: string; type: 'success' | 'error' } | null>(null)
 const automations = ref<UiAutomation[]>([])
 const runs = ref<UiAutomationRun[]>([])
 const defaults = ref<UiAutomationDefaults>({ model: '', reasoningEffort: '', sandboxMode: '' })
+const runtime = ref<UiAutomationRuntime>({ runMode: 'prod', readOnly: false })
 const models = ref<UiCodexModel[]>([])
 const skills = ref<Array<{ name: string; description: string; path: string; scope?: string; projectName?: string }>>([])
 const projects = ref<Array<{ path: string; label: string }>>([])
@@ -505,6 +523,7 @@ const approvalsReviewerOptions = [
 ]
 
 const effectiveModelId = computed(() => form.model || defaults.value.model || '')
+const automationReadOnly = computed(() => runtime.value.readOnly)
 
 const reasoningOptions = computed(() =>
   buildReasoningEffortOptions(models.value, effectiveModelId.value, true),
@@ -779,6 +798,7 @@ async function refreshAll(): Promise<void> {
     automations.value = automationState.automations
     runs.value = automationState.runs
     defaults.value = automationState.defaults
+    runtime.value = automationState.runtime
     models.value = availableModels
     skills.value = installedSkills
     projects.value = workspaceState.order.map((path) => ({
@@ -868,6 +888,7 @@ function onSkillToggle(value: string, checked: boolean): void {
 }
 
 function startCreate(): void {
+  if (automationReadOnly.value) return
   activeTab.value = 'automations'
   isListVisible.value = false
   resetForm()
@@ -885,6 +906,7 @@ function selectRun(id: string): void {
 }
 
 async function saveAutomation(): Promise<void> {
+  if (automationReadOnly.value) return
   saving.value = true
   try {
     const payload = {
@@ -928,6 +950,7 @@ async function saveAutomation(): Promise<void> {
 }
 
 async function triggerRun(id: string): Promise<void> {
+  if (automationReadOnly.value) return
   runningAutomationId.value = id
   try {
     await runAutomationNow(id)
@@ -942,6 +965,7 @@ async function triggerRun(id: string): Promise<void> {
 }
 
 async function toggleAutomation(automation: UiAutomation): Promise<void> {
+  if (automationReadOnly.value) return
   try {
     await setAutomationEnabled(automation.id, !automation.enabled)
     showToast(automation.enabled ? 'Automation paused.' : 'Automation enabled.')
@@ -952,6 +976,7 @@ async function toggleAutomation(automation: UiAutomation): Promise<void> {
 }
 
 async function removeAutomation(id: string): Promise<void> {
+  if (automationReadOnly.value) return
   deletingAutomationId.value = id
   try {
     await deleteAutomation(id)
@@ -966,6 +991,7 @@ async function removeAutomation(id: string): Promise<void> {
 }
 
 async function markRunRead(id: string): Promise<void> {
+  if (automationReadOnly.value) return
   try {
     await markAutomationRunRead(id)
     await refreshAll()
@@ -975,6 +1001,7 @@ async function markRunRead(id: string): Promise<void> {
 }
 
 async function setRunArchived(id: string, archived: boolean): Promise<void> {
+  if (automationReadOnly.value) return
   try {
     await setAutomationRunArchived(id, archived)
     await refreshAll()
@@ -1318,6 +1345,10 @@ onBeforeUnmount(() => {
   @apply inline-flex w-fit items-center rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50;
 }
 
+.automations-hub-inline-link:disabled {
+  @apply cursor-not-allowed text-zinc-400 hover:bg-white;
+}
+
 .automations-hub-inline-link.is-danger {
   @apply text-rose-700;
 }
@@ -1459,6 +1490,11 @@ onBeforeUnmount(() => {
 .automations-hub-input,
 .automations-hub-textarea {
   @apply w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-300 focus:bg-white;
+}
+
+.automations-hub-input:disabled,
+.automations-hub-textarea:disabled {
+  @apply cursor-not-allowed text-zinc-500;
 }
 
 .automations-hub-textarea {

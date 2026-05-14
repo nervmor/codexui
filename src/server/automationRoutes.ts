@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { CronExpressionParser } from 'cron-parser'
+import { isCodexuiDebugMode, readCodexuiRunMode, type CodexuiRunMode } from './runtimeMode.js'
 
 type RpcInvoker = {
   rpc: (method: string, params: unknown) => Promise<unknown>
@@ -111,6 +112,11 @@ type AutomationDefaults = {
   model: string
   reasoningEffort: string
   sandboxMode: string
+}
+
+type AutomationRuntimeState = {
+  runMode: CodexuiRunMode
+  readOnly: boolean
 }
 
 const AUTOMATION_STORE_VERSION = 1
@@ -638,7 +644,10 @@ class AutomationManager {
   private tickInFlight = false
   private readonly runningAutomationIds = new Set<string>()
 
-  constructor(private readonly appServer: RpcInvoker) {}
+  constructor(
+    private readonly appServer: RpcInvoker,
+    private readonly runtime: AutomationRuntimeState,
+  ) {}
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return
@@ -647,7 +656,7 @@ class AutomationManager {
         .then((store) => {
           this.store = store
           this.loaded = true
-          if (!this.schedulerTimer) {
+          if (!this.runtime.readOnly && !this.schedulerTimer) {
             this.schedulerTimer = setInterval(() => {
               void this.tick()
             }, SCHEDULER_INTERVAL_MS)
@@ -992,18 +1001,25 @@ class AutomationManager {
     }
   }
 
-  async getState(): Promise<{ automations: AutomationRecord[]; runs: AutomationRunRecord[]; defaults: AutomationDefaults }> {
+  async getState(): Promise<{ automations: AutomationRecord[]; runs: AutomationRunRecord[]; defaults: AutomationDefaults; runtime: AutomationRuntimeState }> {
     await this.ensureLoaded()
     this.sortState()
     return {
       automations: this.store.automations,
       runs: this.store.runs,
       defaults: await this.getDefaults(),
+      runtime: this.runtime,
     }
+  }
+
+  private assertWritable(): void {
+    if (!this.runtime.readOnly) return
+    throw new Error('Automations are read-only when CODEXUI_RUN_MODE=debug')
   }
 
   async createAutomation(input: unknown): Promise<AutomationRecord> {
     await this.ensureLoaded()
+    this.assertWritable()
     const normalized = this.validateInput(input)
     for (const path of normalized.projectPaths) {
       if (!(await directoryExists(path))) {
@@ -1031,6 +1047,7 @@ class AutomationManager {
 
   async updateAutomation(id: string, input: unknown): Promise<AutomationRecord> {
     await this.ensureLoaded()
+    this.assertWritable()
     const normalizedId = id.trim()
     const existing = this.store.automations.find((automation) => automation.id === normalizedId)
     if (!existing) {
@@ -1059,6 +1076,7 @@ class AutomationManager {
 
   async deleteAutomation(id: string): Promise<void> {
     await this.ensureLoaded()
+    this.assertWritable()
     const normalizedId = id.trim()
     this.store.automations = this.store.automations.filter((automation) => automation.id !== normalizedId)
     this.store.runs = this.store.runs.filter((run) => run.automationId !== normalizedId)
@@ -1067,6 +1085,7 @@ class AutomationManager {
 
   async setAutomationEnabled(id: string, enabled: boolean): Promise<AutomationRecord> {
     await this.ensureLoaded()
+    this.assertWritable()
     const normalizedId = id.trim()
     let updated: AutomationRecord | null = null
     this.store.automations = this.store.automations.map((automation) => {
@@ -1086,6 +1105,7 @@ class AutomationManager {
 
   async setRunState(id: string, updates: { unread?: boolean; archived?: boolean }): Promise<AutomationRunRecord> {
     await this.ensureLoaded()
+    this.assertWritable()
     const normalizedId = id.trim()
     let updated: AutomationRunRecord | null = null
     this.store.runs = this.store.runs.map((run) => {
@@ -1105,6 +1125,7 @@ class AutomationManager {
 
   async runAutomationNow(id: string): Promise<void> {
     await this.ensureLoaded()
+    this.assertWritable()
     const automation = this.store.automations.find((item) => item.id === id.trim())
     if (!automation) throw new Error('Automation not found')
     void this.runAutomation(automation)
@@ -1139,6 +1160,7 @@ class AutomationManager {
 
   async tick(): Promise<void> {
     await this.ensureLoaded()
+    if (this.runtime.readOnly) return
     if (this.tickInFlight) return
     this.tickInFlight = true
     try {
@@ -1166,7 +1188,10 @@ const AUTOMATION_MANAGER_KEY = '__codexuiAutomationManager__'
 function getAutomationManager(appServer: RpcInvoker): AutomationManager {
   const scope = globalThis as typeof globalThis & { [AUTOMATION_MANAGER_KEY]?: AutomationManager }
   if (!scope[AUTOMATION_MANAGER_KEY]) {
-    scope[AUTOMATION_MANAGER_KEY] = new AutomationManager(appServer)
+    scope[AUTOMATION_MANAGER_KEY] = new AutomationManager(appServer, {
+      runMode: readCodexuiRunMode(),
+      readOnly: isCodexuiDebugMode(),
+    })
   }
   return scope[AUTOMATION_MANAGER_KEY]
 }

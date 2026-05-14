@@ -1635,6 +1635,11 @@ export type UiAutomationDefaults = {
   sandboxMode: string
 }
 
+export type UiAutomationRuntime = {
+  runMode: 'prod' | 'debug'
+  readOnly: boolean
+}
+
 function normalizeUiAutomation(value: unknown): UiAutomation | null {
   const record = asRecord(value)
   if (!record) return null
@@ -1765,6 +1770,7 @@ export async function getAutomationsState(): Promise<{
   automations: UiAutomation[]
   runs: UiAutomationRun[]
   defaults: UiAutomationDefaults
+  runtime: UiAutomationRuntime
 }> {
   const response = await fetch('/codex-api/automations/state')
   const payload = (await response.json()) as unknown
@@ -1775,6 +1781,8 @@ export async function getAutomationsState(): Promise<{
   const envelope = asRecord(payload)
   const data = asRecord(envelope?.data)
   const defaultsRecord = asRecord(data?.defaults)
+  const runtimeRecord = asRecord(data?.runtime)
+  const runMode = readString(runtimeRecord?.runMode)
   return {
     automations: (Array.isArray(data?.automations) ? data.automations : [])
       .map((entry) => normalizeUiAutomation(entry))
@@ -1786,6 +1794,10 @@ export async function getAutomationsState(): Promise<{
       model: readString(defaultsRecord?.model) ?? '',
       reasoningEffort: readString(defaultsRecord?.reasoningEffort) ?? '',
       sandboxMode: readString(defaultsRecord?.sandboxMode) ?? '',
+    },
+    runtime: {
+      runMode: runMode === 'debug' ? 'debug' : 'prod',
+      readOnly: readBoolean(runtimeRecord?.readOnly) ?? false,
     },
   }
 }
