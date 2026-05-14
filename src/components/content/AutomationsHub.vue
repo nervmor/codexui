@@ -38,7 +38,7 @@
       </button>
     </div>
 
-    <div v-if="activeTab === 'triage'" class="automations-hub-split">
+    <div v-if="activeTab === 'triage'" class="automations-hub-split automations-hub-split--triage">
       <section class="automations-hub-panel automations-hub-panel--list">
         <div class="automations-hub-section-header">
           <h3 class="automations-hub-section-title">Inbox</h3>
@@ -84,7 +84,12 @@
           <div class="automations-hub-section-header">
             <div>
               <h3 class="automations-hub-section-title">{{ selectedRun.automationTitle }}</h3>
-              <p class="automations-hub-detail-meta">{{ shortPath(selectedRun.projectPath) }} · {{ runStatusLabel(selectedRun) }}</p>
+              <p class="automations-hub-detail-meta">
+                {{ shortPath(selectedRun.projectPath) }} · {{ runStatusLabel(selectedRun) }} ·
+                {{ formatDateTime(selectedRun.startedAtIso) }}
+                <template v-if="selectedRun.completedAtIso">- {{ formatDateTime(selectedRun.completedAtIso) }}</template>
+                · {{ selectedRun.effectiveRunMode }} · {{ selectedRun.model || defaults.model || 'default' }}
+              </p>
             </div>
             <div class="automations-hub-inline-actions">
               <button
@@ -108,29 +113,10 @@
             </div>
           </div>
 
-          <div class="automations-hub-detail-grid">
-            <div class="automations-hub-stat">
-              <span class="automations-hub-stat-label">Started</span>
-              <span class="automations-hub-stat-value">{{ formatDateTime(selectedRun.startedAtIso) }}</span>
-            </div>
-            <div class="automations-hub-stat">
-              <span class="automations-hub-stat-label">Completed</span>
-              <span class="automations-hub-stat-value">{{ selectedRun.completedAtIso ? formatDateTime(selectedRun.completedAtIso) : 'Running…' }}</span>
-            </div>
-            <div class="automations-hub-stat">
-              <span class="automations-hub-stat-label">Mode</span>
-              <span class="automations-hub-stat-value">{{ selectedRun.effectiveRunMode }}</span>
-            </div>
-            <div class="automations-hub-stat">
-              <span class="automations-hub-stat-label">Model</span>
-              <span class="automations-hub-stat-value">{{ selectedRun.model || defaults.model || 'default' }}</span>
-            </div>
-          </div>
-
           <p v-if="selectedRun.error" class="automations-hub-callout is-error">{{ selectedRun.error }}</p>
           <p v-else-if="selectedRun.archived" class="automations-hub-callout">Auto-archived because the run did not report notable findings.</p>
 
-          <pre class="automations-hub-output">{{ selectedRun.finalMessage || 'No final message recorded yet.' }}</pre>
+          <div class="automations-hub-output" v-html="renderAutomationMarkdown(selectedRun.finalMessage || 'No final message recorded yet.')" />
         </template>
         <div v-else class="automations-hub-empty">Select a triage item to inspect the latest run output.</div>
       </section>
@@ -462,6 +448,149 @@ const selectedRun = computed(() =>
     ?? null,
 )
 
+type AutomationMarkdownBlock =
+  | { kind: 'paragraph'; value: string }
+  | { kind: 'heading'; level: number; value: string }
+  | { kind: 'unorderedList'; items: string[] }
+  | { kind: 'orderedList'; items: string[]; start: number }
+  | { kind: 'codeBlock'; language: string; value: string }
+  | { kind: 'divider' }
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&#39;')
+}
+
+function renderInlineAutomationMarkdown(value: string): string {
+  const placeholders: string[] = []
+  const protect = (html: string): string => {
+    const token = `\u0000${placeholders.length}\u0000`
+    placeholders.push(html)
+    return token
+  }
+
+  let rendered = escapeHtml(value)
+  rendered = rendered.replace(/`([^`\n]+)`/gu, (_match, code: string) => protect(`<code>${code}</code>`))
+  rendered = rendered.replace(/\*\*([^*\n][\s\S]*?[^*\n])\*\*/gu, '<strong>$1</strong>')
+  rendered = rendered.replace(/\*([^*\n][^*\n]*?)\*/gu, '<em>$1</em>')
+  rendered = rendered.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/gu, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+
+  placeholders.forEach((html, index) => {
+    rendered = rendered.split(`\u0000${index}\u0000`).join(html)
+  })
+  return rendered
+}
+
+function parseAutomationMarkdown(value: string): AutomationMarkdownBlock[] {
+  const lines = value.replace(/\r\n/gu, '\n').split('\n')
+  const blocks: AutomationMarkdownBlock[] = []
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index]
+    const trimmed = line.trim()
+    if (!trimmed) {
+      index += 1
+      continue
+    }
+
+    const fence = trimmed.match(/^(```+|~~~+)\s*([^\s`]*)?/u)
+    if (fence) {
+      const marker = fence[1]
+      const language = fence[2] ?? ''
+      const codeLines: string[] = []
+      index += 1
+      while (index < lines.length && lines[index].trim() !== marker) {
+        codeLines.push(lines[index])
+        index += 1
+      }
+      if (index < lines.length) index += 1
+      blocks.push({ kind: 'codeBlock', language, value: codeLines.join('\n') })
+      continue
+    }
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.+)$/u)
+    if (heading) {
+      blocks.push({ kind: 'heading', level: heading[1].length, value: heading[2].trim() })
+      index += 1
+      continue
+    }
+
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/u.test(trimmed)) {
+      blocks.push({ kind: 'divider' })
+      index += 1
+      continue
+    }
+
+    const unordered = trimmed.match(/^[-*+]\s+(.+)$/u)
+    if (unordered) {
+      const items: string[] = []
+      while (index < lines.length) {
+        const item = lines[index].trim().match(/^[-*+]\s+(.+)$/u)
+        if (!item) break
+        items.push(item[1].trim())
+        index += 1
+      }
+      blocks.push({ kind: 'unorderedList', items })
+      continue
+    }
+
+    const ordered = trimmed.match(/^(\d+)[.)]\s+(.+)$/u)
+    if (ordered) {
+      const items: string[] = []
+      const start = Number.parseInt(ordered[1], 10) || 1
+      while (index < lines.length) {
+        const item = lines[index].trim().match(/^\d+[.)]\s+(.+)$/u)
+        if (!item) break
+        items.push(item[1].trim())
+        index += 1
+      }
+      blocks.push({ kind: 'orderedList', items, start })
+      continue
+    }
+
+    const paragraph: string[] = []
+    while (index < lines.length) {
+      const next = lines[index]
+      const nextTrimmed = next.trim()
+      if (!nextTrimmed) break
+      if (/^(```+|~~~+)/u.test(nextTrimmed) || /^#{1,6}\s+/u.test(nextTrimmed) || /^[-*+]\s+/u.test(nextTrimmed) || /^\d+[.)]\s+/u.test(nextTrimmed)) break
+      paragraph.push(nextTrimmed)
+      index += 1
+    }
+    blocks.push({ kind: 'paragraph', value: paragraph.join(' ') })
+  }
+
+  return blocks
+}
+
+function renderAutomationMarkdown(value: string): string {
+  return parseAutomationMarkdown(value)
+    .map((block) => {
+      if (block.kind === 'heading') {
+        const level = Math.min(3, Math.max(2, block.level + 1))
+        return `<h${level}>${renderInlineAutomationMarkdown(block.value)}</h${level}>`
+      }
+      if (block.kind === 'unorderedList') {
+        return `<ul>${block.items.map((item) => `<li>${renderInlineAutomationMarkdown(item)}</li>`).join('')}</ul>`
+      }
+      if (block.kind === 'orderedList') {
+        return `<ol start="${block.start}">${block.items.map((item) => `<li>${renderInlineAutomationMarkdown(item)}</li>`).join('')}</ol>`
+      }
+      if (block.kind === 'codeBlock') {
+        const language = block.language ? `<span>${escapeHtml(block.language)}</span>` : ''
+        return `<pre>${language}<code>${escapeHtml(block.value)}</code></pre>`
+      }
+      if (block.kind === 'divider') return '<hr>'
+      return `<p>${renderInlineAutomationMarkdown(block.value)}</p>`
+    })
+    .join('')
+}
+
 function showToast(text: string, type: 'success' | 'error' = 'success'): void {
   toast.value = { text, type }
   if (toastTimer) clearTimeout(toastTimer)
@@ -751,7 +880,7 @@ onBeforeUnmount(() => {
 @reference "tailwindcss";
 
 .automations-hub {
-  @apply mx-auto flex h-full w-full max-w-7xl flex-col gap-4 overflow-y-auto p-3 sm:p-6;
+  @apply mx-auto flex h-full w-full max-w-7xl flex-col gap-3 overflow-y-auto p-3 sm:p-4;
 }
 
 .automations-hub-header {
@@ -759,7 +888,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-title {
-  @apply m-0 text-2xl font-semibold text-zinc-900;
+  @apply m-0 text-xl font-semibold text-zinc-900;
 }
 
 .automations-hub-subtitle {
@@ -771,7 +900,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-button {
-  @apply inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60;
+  @apply inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60;
 }
 
 .automations-hub-button.is-primary {
@@ -779,7 +908,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-toast {
-  @apply rounded-2xl border px-3 py-2 text-sm font-medium;
+  @apply rounded-lg border px-3 py-2 text-sm font-medium;
 }
 
 .automations-hub-toast.is-success {
@@ -807,7 +936,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-tab {
-  @apply rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50;
+  @apply rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50;
 }
 
 .automations-hub-tab.is-active {
@@ -815,16 +944,30 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-split {
-  @apply grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)];
+  @apply grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(18rem,0.78fr)_minmax(0,1.35fr)];
+}
+
+.automations-hub-split--triage {
+  @apply lg:grid-cols-[minmax(18rem,0.62fr)_minmax(0,1.55fr)];
 }
 
 .automations-hub-panel {
-  @apply flex min-h-0 flex-col gap-3 rounded-3xl border border-zinc-200 bg-white p-4;
+  @apply flex min-h-0 flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3;
 }
 
 .automations-hub-panel--list,
 .automations-hub-panel--detail {
   @apply overflow-hidden;
+}
+
+@media (max-width: 1023px) {
+  .automations-hub-split--triage .automations-hub-panel--list {
+    max-height: 14rem;
+  }
+
+  .automations-hub-split--triage .automations-hub-panel--detail {
+    min-height: 32rem;
+  }
 }
 
 .automations-hub-section-header {
@@ -844,7 +987,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-pill {
-  @apply rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs text-zinc-500 transition hover:bg-zinc-100;
+  @apply rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-500 transition hover:bg-zinc-100;
 }
 
 .automations-hub-pill.is-active {
@@ -852,7 +995,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-empty {
-  @apply rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500;
+  @apply rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500;
 }
 
 .automations-hub-run-list,
@@ -862,7 +1005,7 @@ onBeforeUnmount(() => {
 
 .automations-hub-run-card,
 .automations-hub-automation-card {
-  @apply flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-left transition hover:border-zinc-300 hover:bg-white;
+  @apply flex flex-col gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-left transition hover:border-zinc-300 hover:bg-white;
 }
 
 .automations-hub-run-card.is-active,
@@ -908,7 +1051,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-run-summary {
-  @apply m-0 text-sm leading-6 text-zinc-600 line-clamp-3;
+  @apply m-0 text-xs leading-5 text-zinc-600 line-clamp-2;
 }
 
 .automations-hub-inline-actions {
@@ -916,7 +1059,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-inline-link {
-  @apply inline-flex w-fit items-center rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50;
+  @apply inline-flex w-fit items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50;
 }
 
 .automations-hub-inline-link.is-danger {
@@ -928,7 +1071,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-stat {
-  @apply rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2;
+  @apply rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2;
 }
 
 .automations-hub-stat-label {
@@ -940,7 +1083,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-callout {
-  @apply m-0 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600;
+  @apply m-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600;
 }
 
 .automations-hub-callout.is-error {
@@ -948,7 +1091,57 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-output {
-  @apply min-h-0 flex-1 overflow-auto rounded-2xl border border-zinc-200 bg-zinc-950 p-4 text-xs leading-6 text-zinc-100;
+  @apply min-h-[26rem] flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm leading-6 text-zinc-800;
+}
+
+.automations-hub-output :deep(h2),
+.automations-hub-output :deep(h3) {
+  @apply mb-2 mt-4 text-base font-semibold text-zinc-950 first:mt-0;
+}
+
+.automations-hub-output :deep(p) {
+  @apply my-2 whitespace-pre-wrap;
+}
+
+.automations-hub-output :deep(ul),
+.automations-hub-output :deep(ol) {
+  @apply my-2 pl-5;
+}
+
+.automations-hub-output :deep(ul) {
+  @apply list-disc;
+}
+
+.automations-hub-output :deep(ol) {
+  @apply list-decimal;
+}
+
+.automations-hub-output :deep(li) {
+  @apply my-1 pl-1;
+}
+
+.automations-hub-output :deep(code) {
+  @apply rounded bg-zinc-100 px-1 py-0.5 font-mono text-[0.92em] text-zinc-900;
+}
+
+.automations-hub-output :deep(pre) {
+  @apply my-3 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs leading-6 text-zinc-100;
+}
+
+.automations-hub-output :deep(pre code) {
+  @apply rounded-none bg-transparent p-0 text-zinc-100;
+}
+
+.automations-hub-output :deep(pre span) {
+  @apply mb-2 block text-[10px] uppercase tracking-[0.08em] text-zinc-400;
+}
+
+.automations-hub-output :deep(a) {
+  @apply font-medium text-sky-700 underline underline-offset-2;
+}
+
+.automations-hub-output :deep(hr) {
+  @apply my-4 border-zinc-200;
 }
 
 .automations-hub-chip-row {
@@ -956,7 +1149,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-chip {
-  @apply rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-600;
+  @apply rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-600;
 }
 
 .automations-hub-form {
@@ -977,7 +1170,7 @@ onBeforeUnmount(() => {
 
 .automations-hub-input,
 .automations-hub-textarea {
-  @apply w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-300 focus:bg-white;
+  @apply w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-300 focus:bg-white;
 }
 
 .automations-hub-textarea {
@@ -986,11 +1179,11 @@ onBeforeUnmount(() => {
 
 .automations-hub-picker,
 .automations-hub-dropdown {
-  @apply rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2;
+  @apply rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2;
 }
 
 .automations-hub-switch {
-  @apply flex items-start gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700;
+  @apply flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700;
 }
 
 .automations-hub-switch input {
