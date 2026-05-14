@@ -1185,6 +1185,29 @@ onBeforeUnmount(() => {
     overflow: hidden;
   }
 
+  .automations-hub-split .automations-hub-panel--list,
+  .automations-hub-split--triage .automations-hub-panel--list {
+    height: clamp(16rem, 42dvh, 24rem);
+    min-height: 0;
+    max-height: 50dvh;
+    flex: 0 0 auto;
+  }
+
+  .automations-hub-pill-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.125rem;
+  }
+
+  .automations-hub-pill {
+    white-space: nowrap;
+  }
+
+  .automations-hub-panel--list .automations-hub-run-list,
+  .automations-hub-panel--list .automations-hub-automation-list {
+    flex: 1 1 auto;
+  }
+
   .automations-hub-inline-actions {
     width: 100%;
     flex-wrap: nowrap;
