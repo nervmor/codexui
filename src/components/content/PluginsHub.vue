@@ -1,12 +1,5 @@
 <template>
   <div ref="hubScrollContainer" class="plugins-hub">
-    <div class="plugins-hub-capability-row">
-      <span class="plugins-hub-capability" :class="{ 'is-enabled': pluginMethodsAvailable }">Plugins</span>
-      <span class="plugins-hub-capability" :class="{ 'is-enabled': appMethodsAvailable }">Apps</span>
-      <span class="plugins-hub-capability" :class="{ 'is-enabled': mcpMethodsAvailable }">MCP</span>
-      <span class="plugins-hub-capability" :class="{ 'is-enabled': hookMethodsAvailable }">Hooks</span>
-    </div>
-
     <div v-if="toast" class="plugins-hub-toast" :class="toast.type === 'error' ? 'plugins-hub-toast-error' : 'plugins-hub-toast-success'">
       {{ toast.text }}
     </div>
@@ -727,18 +720,6 @@ onBeforeUnmount(() => {
 .plugins-hub {
   @apply mx-auto flex h-full w-full max-w-6xl flex-col gap-4 overflow-y-auto p-3 sm:p-6;
   overscroll-behavior-y: contain;
-}
-
-.plugins-hub-capability-row {
-  @apply flex flex-wrap gap-2;
-}
-
-.plugins-hub-capability {
-  @apply rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-500;
-}
-
-.plugins-hub-capability.is-enabled {
-  @apply border-emerald-200 bg-emerald-50 text-emerald-700;
 }
 
 .plugins-hub-toast {
