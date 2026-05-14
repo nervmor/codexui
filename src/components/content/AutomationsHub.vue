@@ -1,9 +1,17 @@
 <template>
   <div class="automations-hub">
     <div class="automations-hub-header">
-      <div>
-        <h2 class="automations-hub-title">Automations</h2>
-        <p class="automations-hub-subtitle">Run recurring Codex tasks in the background with official `codex exec`.</p>
+      <div class="automations-hub-tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.value"
+          class="automations-hub-tab"
+          :class="{ 'is-active': activeTab === tab.value }"
+          type="button"
+          @click="activeTab = tab.value"
+        >
+          {{ tab.label }}
+        </button>
       </div>
       <div class="automations-hub-actions">
         <button class="automations-hub-button" type="button" :disabled="loading" @click="refreshAll">
@@ -17,25 +25,6 @@
 
     <div v-if="toast" class="automations-hub-toast" :class="toast.type === 'error' ? 'is-error' : 'is-success'">
       {{ toast.text }}
-    </div>
-
-    <div class="automations-hub-capability-row">
-      <span class="automations-hub-capability is-enabled">Local scheduler</span>
-      <span class="automations-hub-capability is-enabled">`codex exec` runner</span>
-      <span class="automations-hub-capability">{{ defaults.model || 'default model' }}</span>
-    </div>
-
-    <div class="automations-hub-tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab.value"
-        class="automations-hub-tab"
-        :class="{ 'is-active': activeTab === tab.value }"
-        type="button"
-        @click="activeTab = tab.value"
-      >
-        {{ tab.label }}
-      </button>
     </div>
 
     <div v-if="activeTab === 'triage'" class="automations-hub-split automations-hub-split--triage">
@@ -579,6 +568,10 @@ const selectedRunStructuredJson = computed(() => {
   }
 })
 
+const shouldPollRuns = computed(() =>
+  runningAutomationId.value.length > 0 || runs.value.some((run) => run.status === 'running'),
+)
+
 type AutomationMarkdownBlock =
   | { kind: 'paragraph'; value: string }
   | { kind: 'heading'; level: number; value: string }
@@ -811,6 +804,7 @@ async function refreshAll(): Promise<void> {
     showToast(error instanceof Error ? error.message : 'Failed to refresh automations', 'error')
   } finally {
     loading.value = false
+    syncRunPolling()
   }
 }
 
@@ -1037,6 +1031,23 @@ function openRunWorkspace(run: UiAutomationRun): void {
   void router.push(buildFilesRouteLocation(targetPath, { cwd: targetPath }))
 }
 
+function stopRunPolling(): void {
+  if (!pollTimer) return
+  clearInterval(pollTimer)
+  pollTimer = null
+}
+
+function syncRunPolling(): void {
+  if (!shouldPollRuns.value) {
+    stopRunPolling()
+    return
+  }
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    if (!loading.value) void refreshAll()
+  }, 15_000)
+}
+
 watch(selectedRun, (run) => {
   if (run && selectedRunId.value !== run.id) {
     selectedRunId.value = run.id
@@ -1045,13 +1056,10 @@ watch(selectedRun, (run) => {
 
 onMounted(() => {
   void refreshAll()
-  pollTimer = setInterval(() => {
-    void refreshAll()
-  }, 15_000)
 })
 
 onBeforeUnmount(() => {
-  if (pollTimer) clearInterval(pollTimer)
+  stopRunPolling()
   if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
@@ -1064,15 +1072,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-header {
-  @apply flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between;
-}
-
-.automations-hub-title {
-  @apply m-0 text-lg font-semibold text-zinc-900;
-}
-
-.automations-hub-subtitle {
-  @apply m-0 text-xs text-zinc-500;
+  @apply flex flex-wrap items-center justify-between gap-2;
 }
 
 .automations-hub-actions {
@@ -1097,18 +1097,6 @@ onBeforeUnmount(() => {
 
 .automations-hub-toast.is-error {
   @apply border-rose-200 bg-rose-50 text-rose-700;
-}
-
-.automations-hub-capability-row {
-  @apply flex flex-wrap gap-1.5;
-}
-
-.automations-hub-capability {
-  @apply max-w-full rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500;
-}
-
-.automations-hub-capability.is-enabled {
-  @apply border-sky-200 bg-sky-50 text-sky-700;
 }
 
 .automations-hub-tabs {
@@ -1173,6 +1161,10 @@ onBeforeUnmount(() => {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-bottom: 0.125rem;
+  }
+
+  .automations-hub-actions {
+    margin-left: auto;
   }
 
   .automations-hub-inline-link,
