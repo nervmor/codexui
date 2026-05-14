@@ -1060,27 +1060,27 @@ onBeforeUnmount(() => {
 @reference "tailwindcss";
 
 .automations-hub {
-  @apply mx-auto flex h-full w-full max-w-7xl flex-col gap-3 overflow-y-auto p-3 sm:p-4;
+  @apply mx-auto flex h-full w-full max-w-7xl flex-col gap-2.5 overflow-y-auto p-2.5 sm:p-3;
 }
 
 .automations-hub-header {
-  @apply flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between;
+  @apply flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between;
 }
 
 .automations-hub-title {
-  @apply m-0 text-xl font-semibold text-zinc-900;
+  @apply m-0 text-lg font-semibold text-zinc-900;
 }
 
 .automations-hub-subtitle {
-  @apply m-0 text-sm text-zinc-500;
+  @apply m-0 text-xs text-zinc-500;
 }
 
 .automations-hub-actions {
-  @apply flex flex-wrap gap-2;
+  @apply flex flex-wrap gap-1.5;
 }
 
 .automations-hub-button {
-  @apply inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60;
+  @apply inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60;
 }
 
 .automations-hub-button.is-primary {
@@ -1088,7 +1088,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-toast {
-  @apply rounded-lg border px-3 py-2 text-sm font-medium;
+  @apply rounded-md border px-2.5 py-1.5 text-xs font-medium;
 }
 
 .automations-hub-toast.is-success {
@@ -1100,11 +1100,11 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-capability-row {
-  @apply flex flex-wrap gap-2;
+  @apply flex flex-wrap gap-1.5;
 }
 
 .automations-hub-capability {
-  @apply rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-500;
+  @apply max-w-full rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500;
 }
 
 .automations-hub-capability.is-enabled {
@@ -1112,11 +1112,11 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-tabs {
-  @apply flex flex-wrap gap-2;
+  @apply flex flex-wrap gap-1.5;
 }
 
 .automations-hub-tab {
-  @apply rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50;
+  @apply rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50;
 }
 
 .automations-hub-tab.is-active {
@@ -1124,7 +1124,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-split {
-  @apply grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(18rem,0.78fr)_minmax(0,1.35fr)];
+  @apply grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[minmax(18rem,0.78fr)_minmax(0,1.35fr)];
 }
 
 .automations-hub-split--triage {
@@ -1132,7 +1132,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-panel {
-  @apply flex min-h-0 flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3;
+  @apply flex min-h-0 flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-2.5;
 }
 
 .automations-hub-panel--list,
@@ -1142,32 +1142,73 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1023px) {
   .automations-hub-split--triage .automations-hub-panel--list {
-    max-height: 14rem;
+    max-height: 11rem;
   }
 
   .automations-hub-split--triage .automations-hub-panel--detail {
-    min-height: 32rem;
+    min-height: 28rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .automations-hub {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .automations-hub-split,
+  .automations-hub-split--triage {
+    display: flex;
+    min-height: auto;
+    flex-direction: column;
+  }
+
+  .automations-hub-panel--detail {
+    overflow: visible;
+  }
+
+  .automations-hub-inline-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.125rem;
+  }
+
+  .automations-hub-inline-link,
+  .automations-hub-button {
+    white-space: nowrap;
+  }
+
+  .automations-hub-output {
+    min-height: 18rem;
+    max-height: none;
+  }
+
+  .automations-hub-event-list,
+  .automations-hub-chip-row {
+    max-height: 8rem;
   }
 }
 
 .automations-hub-section-header {
-  @apply flex flex-wrap items-start justify-between gap-3;
+  @apply flex flex-wrap items-start justify-between gap-2;
 }
 
 .automations-hub-section-title {
-  @apply m-0 text-sm font-semibold text-zinc-900;
+  @apply m-0 text-xs font-semibold text-zinc-900;
 }
 
 .automations-hub-section-count {
-  @apply rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-500;
+  @apply rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] text-zinc-500;
 }
 
 .automations-hub-pill-row {
-  @apply flex flex-wrap gap-2;
+  @apply flex flex-wrap gap-1.5;
 }
 
 .automations-hub-pill {
-  @apply rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-500 transition hover:bg-zinc-100;
+  @apply rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-500 transition hover:bg-zinc-100;
 }
 
 .automations-hub-pill.is-active {
@@ -1175,17 +1216,17 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-empty {
-  @apply rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500;
+  @apply rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-3 py-6 text-center text-xs text-zinc-500;
 }
 
 .automations-hub-run-list,
 .automations-hub-automation-list {
-  @apply flex min-h-0 flex-col gap-3 overflow-y-auto pr-1;
+  @apply flex min-h-0 flex-col gap-2 overflow-y-auto pr-1;
 }
 
 .automations-hub-run-card,
 .automations-hub-automation-card {
-  @apply flex flex-col gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-left transition hover:border-zinc-300 hover:bg-white;
+  @apply flex flex-col gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-2 text-left transition hover:border-zinc-300 hover:bg-white;
 }
 
 .automations-hub-run-card.is-active,
@@ -1198,15 +1239,15 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-run-top {
-  @apply flex flex-wrap items-center justify-between gap-2;
+  @apply flex flex-wrap items-center justify-between gap-1.5;
 }
 
 .automations-hub-run-title {
-  @apply text-sm font-semibold text-zinc-900;
+  @apply text-xs font-semibold text-zinc-900;
 }
 
 .automations-hub-run-status {
-  @apply rounded-full border px-2 py-0.5 text-[10px] font-medium;
+  @apply rounded-md border px-1.5 py-0.5 text-[9px] font-medium;
 }
 
 .automations-hub-run-status.is-running {
@@ -1227,19 +1268,19 @@ onBeforeUnmount(() => {
 
 .automations-hub-run-meta,
 .automations-hub-detail-meta {
-  @apply m-0 text-xs text-zinc-500;
+  @apply m-0 text-[11px] leading-4 text-zinc-500;
 }
 
 .automations-hub-run-summary {
-  @apply m-0 text-xs leading-5 text-zinc-600 line-clamp-2;
+  @apply m-0 text-[11px] leading-4 text-zinc-600 line-clamp-2;
 }
 
 .automations-hub-inline-actions {
-  @apply flex flex-wrap gap-2;
+  @apply flex flex-wrap gap-1.5;
 }
 
 .automations-hub-inline-link {
-  @apply inline-flex w-fit items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50;
+  @apply inline-flex w-fit items-center rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-50;
 }
 
 .automations-hub-inline-link.is-danger {
@@ -1263,7 +1304,7 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-callout {
-  @apply m-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600;
+  @apply m-0 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs text-zinc-600;
 }
 
 .automations-hub-callout.is-error {
@@ -1271,31 +1312,31 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-output {
-  @apply min-h-[26rem] flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm leading-6 text-zinc-800;
+  @apply min-h-[24rem] flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-6 text-zinc-800;
 }
 
 .automations-hub-structured-output {
-  @apply max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-950 px-3 py-2 font-mono text-xs leading-5 text-zinc-100;
+  @apply max-h-32 overflow-auto rounded-md border border-zinc-200 bg-zinc-950 px-2.5 py-2 font-mono text-[11px] leading-5 text-zinc-100;
 }
 
 .automations-hub-event-list {
-  @apply flex max-h-96 flex-col gap-2 overflow-y-auto pr-1;
+  @apply flex max-h-52 flex-col gap-1.5 overflow-y-auto pr-1;
 }
 
 .automations-hub-event {
-  @apply rounded-lg border border-zinc-200 bg-zinc-50 p-3;
+  @apply rounded-md border border-zinc-200 bg-zinc-50 p-2;
 }
 
 .automations-hub-event-top {
-  @apply flex flex-wrap items-center justify-between gap-2;
+  @apply flex flex-wrap items-center justify-between gap-1.5;
 }
 
 .automations-hub-event-title {
-  @apply text-sm font-semibold text-zinc-900;
+  @apply text-xs font-semibold text-zinc-900;
 }
 
 .automations-hub-event-body {
-  @apply mt-2 max-h-48 overflow-auto text-sm leading-6 text-zinc-700;
+  @apply mt-1.5 max-h-32 overflow-auto text-xs leading-5 text-zinc-700;
 }
 
 .automations-hub-event-body :deep(p) {
@@ -1308,7 +1349,7 @@ onBeforeUnmount(() => {
 
 .automations-hub-output :deep(h2),
 .automations-hub-output :deep(h3) {
-  @apply mb-2 mt-4 text-base font-semibold text-zinc-950 first:mt-0;
+  @apply mb-1.5 mt-3 text-sm font-semibold text-zinc-950 first:mt-0;
 }
 
 .automations-hub-output :deep(p) {
@@ -1357,11 +1398,11 @@ onBeforeUnmount(() => {
 }
 
 .automations-hub-chip-row {
-  @apply flex flex-wrap gap-2;
+  @apply flex max-h-12 flex-wrap gap-1.5 overflow-y-auto;
 }
 
 .automations-hub-chip {
-  @apply rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-600;
+  @apply max-w-full break-all rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] leading-4 text-zinc-600;
 }
 
 .automations-hub-form {
