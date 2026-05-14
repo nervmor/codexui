@@ -80,11 +80,9 @@
             <div>
               <h3 class="automations-hub-section-title">{{ selectedRun.automationTitle }}</h3>
               <p class="automations-hub-detail-meta">
-                {{ shortPath(selectedRun.projectPath) }} · {{ runStatusLabel(selectedRun) }} ·
+                {{ shortPath(selectedRun.projectPath) }} ·
                 {{ formatDateTime(selectedRun.startedAtIso) }}
                 <template v-if="selectedRun.completedAtIso">- {{ formatDateTime(selectedRun.completedAtIso) }}</template>
-                · {{ selectedRun.effectiveRunMode }} · {{ selectedRun.model || defaults.model || 'default' }}
-                · {{ usageLabel(selectedRun) }}
               </p>
             </div>
             <div class="automations-hub-inline-actions">
@@ -111,14 +109,6 @@
 
           <p v-if="selectedRun.error" class="automations-hub-callout is-error">{{ selectedRun.error }}</p>
           <p v-else-if="selectedRun.archived" class="automations-hub-callout">Auto-archived because the run did not report notable findings.</p>
-
-          <div class="automations-hub-chip-row">
-            <span v-if="selectedRun.threadId" class="automations-hub-chip">thread: {{ selectedRun.threadId }}</span>
-            <span v-if="selectedRun.resumedThreadId" class="automations-hub-chip">resumed: {{ selectedRun.resumedThreadId }}</span>
-            <span class="automations-hub-chip">approval: {{ selectedRun.approvalPolicy }}</span>
-            <span class="automations-hub-chip">reviewer: {{ selectedRun.approvalsReviewer }}</span>
-            <span class="automations-hub-chip">web: {{ selectedRun.webSearchMode }}</span>
-          </div>
 
           <div v-if="selectedRun.items.length > 0" class="automations-hub-event-list">
             <article v-for="item in selectedRun.items" :key="item.id" class="automations-hub-event">
@@ -1024,12 +1014,6 @@ function formatRelative(value: string): string {
   if (Math.abs(totalHours) < 48) return `${totalHours}h`
   const totalDays = Math.round(totalHours / 24)
   return `${totalDays}d`
-}
-
-function usageLabel(run: UiAutomationRun): string {
-  if (!run.usage) return 'usage pending'
-  const total = run.usage.inputTokens + run.usage.outputTokens
-  return `${total.toLocaleString()} tokens`
 }
 
 function runStatusLabel(run: UiAutomationRun): string {
