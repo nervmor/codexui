@@ -1162,20 +1162,27 @@ onBeforeUnmount(() => {
 
 @media (max-width: 767px) {
   .automations-hub {
-    height: auto;
-    min-height: 100%;
-    overflow: visible;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .automations-hub-split,
   .automations-hub-split--triage {
     display: flex;
-    min-height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
     flex-direction: column;
+    overflow: hidden;
+  }
+
+  .automations-hub-split.is-list-hidden {
+    display: flex;
   }
 
   .automations-hub-panel--detail {
-    overflow: visible;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .automations-hub-inline-actions {
@@ -1195,8 +1202,12 @@ onBeforeUnmount(() => {
   }
 
   .automations-hub-output {
-    min-height: 18rem;
+    min-height: 0;
     max-height: none;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .automations-hub-event-list,
