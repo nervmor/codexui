@@ -108,7 +108,6 @@
           </div>
 
           <p v-if="selectedRun.error" class="automations-hub-callout is-error">{{ selectedRun.error }}</p>
-          <p v-else-if="selectedRun.archived" class="automations-hub-callout">Auto-archived because the run did not report notable findings.</p>
 
           <div v-if="selectedRun.items.length > 0" class="automations-hub-event-list">
             <article v-for="item in selectedRun.items" :key="item.id" class="automations-hub-event">
