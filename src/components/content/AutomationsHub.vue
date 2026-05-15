@@ -111,16 +111,6 @@
 
           <p v-if="selectedRun.error" class="automations-hub-callout is-error">{{ selectedRun.error }}</p>
 
-          <div v-if="selectedRun.items.length > 0" class="automations-hub-event-list">
-            <article v-for="item in selectedRun.items" :key="item.id" class="automations-hub-event">
-              <div class="automations-hub-event-top">
-                <span class="automations-hub-event-title">{{ item.title }}</span>
-                <span class="automations-hub-chip">{{ item.type }} · {{ item.status || 'done' }}</span>
-              </div>
-              <div v-if="item.body" class="automations-hub-event-body" v-html="renderAutomationMarkdown(item.body)" />
-            </article>
-          </div>
-
           <pre v-if="selectedRunStructuredJson" class="automations-hub-structured-output">{{ selectedRunStructuredJson }}</pre>
           <div class="automations-hub-output" v-html="renderAutomationMarkdown(selectedRun.finalMessage || 'No final message recorded yet.')" />
         </template>
@@ -1259,7 +1249,6 @@ onBeforeUnmount(() => {
     overscroll-behavior: contain;
   }
 
-  .automations-hub-event-list,
   .automations-hub-chip-row {
     max-height: 8rem;
   }
@@ -1403,34 +1392,6 @@ onBeforeUnmount(() => {
 
 .automations-hub-structured-output {
   @apply max-h-32 overflow-auto rounded-md border border-zinc-200 bg-zinc-950 px-2.5 py-2 font-mono text-[11px] leading-5 text-zinc-100;
-}
-
-.automations-hub-event-list {
-  @apply flex max-h-52 flex-col gap-1.5 overflow-y-auto pr-1;
-}
-
-.automations-hub-event {
-  @apply rounded-md border border-zinc-200 bg-zinc-50 p-2;
-}
-
-.automations-hub-event-top {
-  @apply flex flex-wrap items-center justify-between gap-1.5;
-}
-
-.automations-hub-event-title {
-  @apply text-xs font-semibold text-zinc-900;
-}
-
-.automations-hub-event-body {
-  @apply mt-1.5 max-h-32 overflow-auto text-xs leading-5 text-zinc-700;
-}
-
-.automations-hub-event-body :deep(p) {
-  @apply my-2 whitespace-pre-wrap first:mt-0 last:mb-0;
-}
-
-.automations-hub-event-body :deep(pre) {
-  @apply my-2 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs leading-6 text-zinc-100;
 }
 
 .automations-hub-output :deep(h2),
