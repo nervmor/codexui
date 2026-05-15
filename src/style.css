@@ -630,11 +630,11 @@
 }
 
 :root.dark .content-header-review-button {
-  @apply border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800;
+  @apply border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100;
 }
 
 :root.dark .content-header-review-button[data-active='true'] {
-  @apply border-zinc-200 bg-zinc-200 text-zinc-900 hover:bg-white;
+  @apply border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-800;
 }
 
 :root.dark .review-pane {

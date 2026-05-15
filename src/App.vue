@@ -216,9 +216,12 @@
               type="button"
               class="content-header-review-button"
               :data-active="isReviewPaneOpen"
+              :aria-label="isReviewPaneOpen ? 'Close review' : 'Open review'"
+              :aria-pressed="isReviewPaneOpen"
+              :title="isReviewPaneOpen ? 'Close review' : 'Open review'"
               @click="isReviewPaneOpen = !isReviewPaneOpen"
             >
-              Review
+              <IconTablerLayoutSidebarRight class="content-header-review-icon" />
             </button>
           </template>
         </ContentHeader>
@@ -348,6 +351,7 @@ import FileExplorer from './components/content/FileExplorer.vue'
 import SidebarThreadControls from './components/sidebar/SidebarThreadControls.vue'
 import IconTablerSearch from './components/icons/IconTablerSearch.vue'
 import IconTablerSettings from './components/icons/IconTablerSettings.vue'
+import IconTablerLayoutSidebarRight from './components/icons/IconTablerLayoutSidebarRight.vue'
 import IconTablerX from './components/icons/IconTablerX.vue'
 import { useDesktopState } from './composables/useDesktopState'
 import { useMobile } from './composables/useMobile'
@@ -1916,11 +1920,15 @@ async function submitFirstMessageForNewThread(
 }
 
 .content-header-review-button {
-  @apply rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 transition hover:bg-zinc-50;
+  @apply inline-flex h-9 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900;
 }
 
 .content-header-review-button[data-active='true'] {
-  @apply border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800;
+  @apply border-zinc-300 bg-zinc-100 text-zinc-900 hover:bg-zinc-100;
+}
+
+.content-header-review-icon {
+  @apply h-4.5 w-4.5;
 }
 
 .new-thread-empty {
