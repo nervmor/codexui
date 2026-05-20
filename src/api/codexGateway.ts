@@ -8,7 +8,6 @@ import {
   type RpcNotification,
 } from './codexRpcClient'
 import type {
-  CollaborationModeListResponse,
   ConfigReadResponse,
   ModelListResponse,
   ReasoningEffort,
@@ -857,10 +856,7 @@ export async function startThread(cwd?: string, model?: string): Promise<string>
 
 export async function forkThread(threadId: string): Promise<{ threadId: string; cwd: string; messages: UiMessage[] }> {
   try {
-    const payload = await callRpc<ThreadReadResponse & { thread?: { id?: string; cwd?: string } }>('thread/fork', {
-      threadId,
-      persistExtendedHistory: true,
-    })
+    const payload = await callRpc<ThreadReadResponse & { thread?: { id?: string; cwd?: string } }>('thread/fork', { threadId })
     const forkedThreadId = normalizeThreadIdFromPayload(payload)
     if (!forkedThreadId) {
       throw new Error('thread/fork did not return a thread id')
@@ -971,14 +967,13 @@ export async function startThreadTurn(
     const normalizedModel = model?.trim() ?? ''
     const textWithMentions = buildTextWithMentions(text, mentions ?? [])
     const finalText = buildTextWithAttachments(textWithMentions, fileAttachments)
-    const input: Array<Record<string, unknown>> = [{ type: 'text', text: finalText }]
+    const input: Array<Record<string, unknown>> = [{ type: 'text', text: finalText, text_elements: [] }]
     for (const imageUrl of imageUrls) {
       const normalizedUrl = imageUrl.trim()
       if (!normalizedUrl) continue
       input.push({
         type: 'image',
         url: normalizedUrl,
-        image_url: normalizedUrl,
       })
     }
     if (skills) {
@@ -992,29 +987,19 @@ export async function startThreadTurn(
         input.push({ type: 'mention', name: mention.name, path: mention.path })
       }
     }
-    const attachments = fileAttachments.map((f) => ({ label: f.label, path: f.path, fsPath: f.fsPath }))
     const params: Record<string, unknown> = {
       threadId,
       input,
     }
-    if (attachments.length > 0) params.attachments = attachments
-    if (normalizedModel) {
-      params.model = normalizedModel
-    }
-    if (typeof effort === 'string' && effort.length > 0) {
-      params.effort = effort
-    }
-    if (collaborationMode) {
-      const collaborationModeSettings = await resolveCollaborationModeSettings(collaborationMode, normalizedModel, effort)
-      params.collaborationMode = {
-        mode: collaborationMode,
-        settings: {
-          model: collaborationModeSettings.model,
-          reasoning_effort: collaborationModeSettings.reasoningEffort,
-          developer_instructions: null,
-        },
-      }
-    }
+    const collaborationModeSettings = collaborationMode
+      ? await resolveCollaborationModeSettings(collaborationMode, normalizedModel, effort)
+      : null
+    const effectiveModel = normalizedModel || collaborationModeSettings?.model || ''
+    const effectiveEffort = typeof effort === 'string' && effort.length > 0
+      ? effort
+      : collaborationModeSettings?.reasoningEffort
+    if (effectiveModel) params.model = effectiveModel
+    if (effectiveEffort) params.effort = effectiveEffort
     const response = await callRpc<TurnStartResponse>('turn/start', params)
     return readString(response?.turn?.id)?.trim() ?? ''
   } catch (error) {
@@ -1037,8 +1022,14 @@ export async function interruptThreadTurn(threadId: string, turnId?: string): Pr
   }
 }
 
-export async function setDefaultModel(model: string): Promise<void> {
-  await callRpc('setDefaultModel', { model })
+export async function writeDefaultModelConfig(model: string): Promise<void> {
+  const normalizedModel = model.trim()
+  if (!normalizedModel) return
+  await callRpc('config/value/write', {
+    keyPath: 'model',
+    value: normalizedModel,
+    mergeStrategy: 'replace',
+  })
 }
 
 export async function getAvailableModels(): Promise<UiCodexModel[]> {
@@ -1058,45 +1049,7 @@ export async function getCurrentModelConfig(): Promise<CurrentModelConfig> {
   return { model, reasoningEffort }
 }
 
-function normalizeCollaborationModeLabel(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  return trimmed
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (segment) => segment.toUpperCase())
-}
-
 export async function getAvailableCollaborationModes(): Promise<CollaborationModeOption[]> {
-  try {
-    const payload = await callRpc<CollaborationModeListResponse>('collaborationMode/list', {})
-    const seen = new Set<CollaborationModeKind>()
-    const normalized: CollaborationModeOption[] = []
-
-    for (const row of payload.data) {
-      const mode = row.mode
-      if (mode !== 'default' && mode !== 'plan') continue
-      if (seen.has(mode)) continue
-      seen.add(mode)
-      normalized.push({
-        value: mode,
-        label: normalizeCollaborationModeLabel(row.name || mode) || (mode === 'plan' ? 'Plan' : 'Default'),
-      })
-    }
-
-    if (normalized.length > 0) {
-      for (const fallback of DEFAULT_COLLABORATION_MODE_OPTIONS) {
-        if (!seen.has(fallback.value)) {
-          normalized.push(fallback)
-        }
-      }
-      return normalized.sort((first, second) => (
-        first.value === second.value ? 0 : first.value === 'default' ? -1 : 1
-      ))
-    }
-  } catch {
-    // Fall back to static options when the app-server does not expose presets.
-  }
-
   return DEFAULT_COLLABORATION_MODE_OPTIONS
 }
 
@@ -1570,7 +1523,7 @@ export type UiAutomation = {
   ignoreRules: boolean
   networkAccess: boolean
   webSearchMode: 'default' | 'disabled' | 'live'
-  approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+  approvalPolicy: 'default' | 'never' | 'on-request' | 'untrusted'
   approvalsReviewer: 'default' | 'user' | 'auto_review'
   autoArchiveEmpty: boolean
   createdAtIso: string
@@ -1620,7 +1573,7 @@ export type UiAutomationRun = {
   reasoningEffort: string
   sandboxMode: string
   webSearchMode: 'default' | 'disabled' | 'live'
-  approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+  approvalPolicy: 'default' | 'never' | 'on-request' | 'untrusted'
   approvalsReviewer: 'default' | 'user' | 'auto_review'
   resumedThreadId: string
   usage: UiAutomationUsage | null
@@ -1674,7 +1627,7 @@ function normalizeUiAutomation(value: unknown): UiAutomation | null {
     ignoreRules: readBoolean(record.ignoreRules) ?? false,
     networkAccess: readBoolean(record.networkAccess) ?? false,
     webSearchMode: webSearchMode === 'disabled' || webSearchMode === 'live' ? webSearchMode : 'default',
-    approvalPolicy: approvalPolicy === 'never' || approvalPolicy === 'on-request' || approvalPolicy === 'on-failure' || approvalPolicy === 'untrusted' ? approvalPolicy : 'default',
+    approvalPolicy: approvalPolicy === 'never' || approvalPolicy === 'on-request' || approvalPolicy === 'untrusted' ? approvalPolicy : 'default',
     approvalsReviewer: approvalsReviewer === 'user' || approvalsReviewer === 'auto_review' ? approvalsReviewer : 'default',
     autoArchiveEmpty: readBoolean(record.autoArchiveEmpty) ?? true,
     createdAtIso: readString(record.createdAtIso) ?? '',
@@ -1756,7 +1709,7 @@ function normalizeUiAutomationRun(value: unknown): UiAutomationRun | null {
     reasoningEffort: readString(record.reasoningEffort) ?? '',
     sandboxMode: readString(record.sandboxMode) ?? '',
     webSearchMode: webSearchMode === 'disabled' || webSearchMode === 'live' ? webSearchMode : 'default',
-    approvalPolicy: approvalPolicy === 'never' || approvalPolicy === 'on-request' || approvalPolicy === 'on-failure' || approvalPolicy === 'untrusted' ? approvalPolicy : 'default',
+    approvalPolicy: approvalPolicy === 'never' || approvalPolicy === 'on-request' || approvalPolicy === 'untrusted' ? approvalPolicy : 'default',
     approvalsReviewer: approvalsReviewer === 'user' || approvalsReviewer === 'auto_review' ? approvalsReviewer : 'default',
     resumedThreadId: readString(record.resumedThreadId) ?? '',
     usage: normalizeUiAutomationUsage(record.usage),
@@ -1821,7 +1774,7 @@ export async function createAutomation(payload: {
   ignoreRules: boolean
   networkAccess: boolean
   webSearchMode: 'default' | 'disabled' | 'live'
-  approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+  approvalPolicy: 'default' | 'never' | 'on-request' | 'untrusted'
   approvalsReviewer: 'default' | 'user' | 'auto_review'
   autoArchiveEmpty: boolean
 }): Promise<UiAutomation> {
@@ -1861,7 +1814,7 @@ export async function updateAutomation(
     ignoreRules: boolean
     networkAccess: boolean
     webSearchMode: 'default' | 'disabled' | 'live'
-    approvalPolicy: 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+    approvalPolicy: 'default' | 'never' | 'on-request' | 'untrusted'
     approvalsReviewer: 'default' | 'user' | 'auto_review'
     autoArchiveEmpty: boolean
   },
@@ -1971,12 +1924,16 @@ export async function persistThreadTitle(id: string, title: string): Promise<voi
 }
 
 export async function generateThreadTitle(prompt: string, cwd: string | null): Promise<string> {
-  try {
-    const result = await callRpc<{ title?: string }>('generate-thread-title', { prompt, cwd })
-    return result.title?.trim() ?? ''
-  } catch {
-    return ''
-  }
+  void cwd
+  const normalized = prompt
+    .replace(/\s+/g, ' ')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim()
+  if (!normalized) return ''
+  const withoutPrefix = normalized.replace(/^(please|help me|can you|could you|let'?s)\s+/i, '').trim()
+  const source = withoutPrefix || normalized
+  const title = source.length > 56 ? source.slice(0, 56).replace(/\s+\S*$/, '') : source
+  return title || source.slice(0, 56)
 }
 
 export type SkillInfo = {

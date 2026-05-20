@@ -1233,6 +1233,7 @@ class AppServerProcess {
       },
       capabilities: {
         experimentalApi: true,
+        requestAttestation: false,
       },
     }).then(() => {
       this.sendLine({

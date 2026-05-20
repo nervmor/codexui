@@ -153,7 +153,6 @@ Based on the app-server protocol (`documentation/APP_SERVER_DOCUMENTATION.md`), 
 | Git diff view | `gitDiffToRemote` |
 | Fuzzy file search | `fuzzyFileSearch`, session-based search |
 | Feedback upload | `feedback/upload` |
-| Collaboration modes | `collaborationMode/list` |
 | Experimental features | `experimentalFeature/list` |
 | Turn diff view | `turn/diff/updated` notification |
 | Turn plan view | `turn/plan/updated` notification |

@@ -475,7 +475,7 @@ const form = reactive({
   ignoreRules: false,
   networkAccess: false,
   webSearchMode: 'default' as 'default' | 'disabled' | 'live',
-  approvalPolicy: 'default' as 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted',
+  approvalPolicy: 'default' as 'default' | 'never' | 'on-request' | 'untrusted',
   approvalsReviewer: 'default' as 'default' | 'user' | 'auto_review',
   autoArchiveEmpty: true,
 })
@@ -509,7 +509,6 @@ const approvalPolicyOptions = [
   { value: 'default', label: 'Use exec default' },
   { value: 'never', label: 'Never' },
   { value: 'on-request', label: 'On request' },
-  { value: 'on-failure', label: 'On failure' },
   { value: 'untrusted', label: 'Untrusted' },
 ]
 
@@ -855,7 +854,7 @@ function onWebSearchModeSelect(value: string): void {
 }
 
 function onApprovalPolicySelect(value: string): void {
-  if (value === 'never' || value === 'on-request' || value === 'on-failure' || value === 'untrusted') {
+  if (value === 'never' || value === 'on-request' || value === 'untrusted') {
     form.approvalPolicy = value
     return
   }

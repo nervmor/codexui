@@ -19,7 +19,7 @@ type AutomationSchedulePreset = 'hourly' | 'daily' | 'weekly' | 'custom'
 type AutomationRunMode = 'local' | 'worktree'
 type AutomationSandboxMode = 'default' | 'read-only' | 'workspace-write' | 'danger-full-access'
 type AutomationWebSearchMode = 'default' | 'disabled' | 'live'
-type AutomationApprovalPolicy = 'default' | 'never' | 'on-request' | 'on-failure' | 'untrusted'
+type AutomationApprovalPolicy = 'default' | 'never' | 'on-request' | 'untrusted'
 type AutomationApprovalsReviewer = 'default' | 'user' | 'auto_review'
 type AutomationStatus = 'idle' | 'running' | 'succeeded' | 'failed'
 type AutomationRunStatus = 'running' | 'completed' | 'failed' | 'archived'
@@ -201,7 +201,7 @@ function normalizeWebSearchMode(value: unknown): AutomationWebSearchMode {
 }
 
 function normalizeApprovalPolicy(value: unknown): AutomationApprovalPolicy {
-  return value === 'never' || value === 'on-request' || value === 'on-failure' || value === 'untrusted' || value === 'default'
+  return value === 'never' || value === 'on-request' || value === 'untrusted' || value === 'default'
     ? value
     : 'default'
 }

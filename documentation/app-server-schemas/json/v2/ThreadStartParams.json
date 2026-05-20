@@ -49,15 +49,10 @@
         "null"
       ]
     },
-    "threadSource": {
-      "description": "Optional client-supplied analytics source classification for this thread.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ThreadSource"
-        },
-        {
-          "type": "null"
-        }
+    "serviceName": {
+      "type": [
+        "string",
+        "null"
       ]
     },
     "sandbox": {
@@ -76,20 +71,21 @@
         "null"
       ]
     },
-    "personality": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/Personality"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "serviceTier": {
       "type": [
         "string",
         "null"
+      ]
+    },
+    "threadSource": {
+      "description": "Optional client-supplied analytics source classification for this thread.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ThreadSource"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "model": {
@@ -104,10 +100,14 @@
         "null"
       ]
     },
-    "serviceName": {
-      "type": [
-        "string",
-        "null"
+    "personality": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Personality"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "sessionStartSource": {
@@ -210,65 +210,6 @@
           ]
         }
       }
-    },
-    "PermissionProfileModificationParams": {
-      "oneOf": [
-        {
-          "description": "Additional concrete directory that should be writable.",
-          "type": "object",
-          "required": [
-            "path",
-            "type"
-          ],
-          "properties": {
-            "path": {
-              "$ref": "#/definitions/AbsolutePathBuf"
-            },
-            "type": {
-              "type": "string",
-              "enum": [
-                "additionalWritableRoot"
-              ],
-              "title": "AdditionalWritableRootPermissionProfileModificationParamsType"
-            }
-          },
-          "title": "AdditionalWritableRootPermissionProfileModificationParams"
-        }
-      ]
-    },
-    "PermissionProfileSelectionParams": {
-      "oneOf": [
-        {
-          "description": "Select a named built-in or user-defined profile and optionally apply bounded modifications that Codex knows how to validate.",
-          "type": "object",
-          "required": [
-            "id",
-            "type"
-          ],
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "modifications": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "items": {
-                "$ref": "#/definitions/PermissionProfileModificationParams"
-              }
-            },
-            "type": {
-              "type": "string",
-              "enum": [
-                "profile"
-              ],
-              "title": "ProfilePermissionProfileSelectionParamsType"
-            }
-          },
-          "title": "ProfilePermissionProfileSelectionParams"
-        }
-      ]
     },
     "Personality": {
       "type": "string",

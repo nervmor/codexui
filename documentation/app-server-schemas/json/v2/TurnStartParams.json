@@ -29,8 +29,16 @@
         }
       ]
     },
-    "threadId": {
-      "type": "string"
+    "sandboxPolicy": {
+      "description": "Override the sandbox policy for this turn and subsequent turns.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SandboxPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "cwd": {
       "description": "Override the working directory for this turn and subsequent turns.",
@@ -50,15 +58,11 @@
         }
       ]
     },
-    "summary": {
-      "description": "Override the reasoning summary for this turn and subsequent turns.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ReasoningSummary"
-        },
-        {
-          "type": "null"
-        }
+    "serviceTier": {
+      "description": "Override the service tier for this turn and subsequent turns.",
+      "type": [
+        "string",
+        "null"
       ]
     },
     "input": {
@@ -77,11 +81,11 @@
     "outputSchema": {
       "description": "Optional JSON Schema used to constrain the final assistant message for this turn."
     },
-    "sandboxPolicy": {
-      "description": "Override the sandbox policy for this turn and subsequent turns.",
+    "summary": {
+      "description": "Override the reasoning summary for this turn and subsequent turns.",
       "anyOf": [
         {
-          "$ref": "#/definitions/SandboxPolicy"
+          "$ref": "#/definitions/ReasoningSummary"
         },
         {
           "type": "null"
@@ -99,12 +103,8 @@
         }
       ]
     },
-    "serviceTier": {
-      "description": "Override the service tier for this turn and subsequent turns.",
-      "type": [
-        "string",
-        "null"
-      ]
+    "threadId": {
+      "type": "string"
     }
   },
   "definitions": {
@@ -206,6 +206,13 @@
         }
       }
     },
+    "ImageDetail": {
+      "type": "string",
+      "enum": [
+        "high",
+        "original"
+      ]
+    },
     "ModeKind": {
       "description": "Initial collaboration mode to use when the TUI starts.",
       "type": "string",
@@ -219,65 +226,6 @@
       "enum": [
         "restricted",
         "enabled"
-      ]
-    },
-    "PermissionProfileModificationParams": {
-      "oneOf": [
-        {
-          "description": "Additional concrete directory that should be writable.",
-          "type": "object",
-          "required": [
-            "path",
-            "type"
-          ],
-          "properties": {
-            "path": {
-              "$ref": "#/definitions/AbsolutePathBuf"
-            },
-            "type": {
-              "type": "string",
-              "enum": [
-                "additionalWritableRoot"
-              ],
-              "title": "AdditionalWritableRootPermissionProfileModificationParamsType"
-            }
-          },
-          "title": "AdditionalWritableRootPermissionProfileModificationParams"
-        }
-      ]
-    },
-    "PermissionProfileSelectionParams": {
-      "oneOf": [
-        {
-          "description": "Select a named built-in or user-defined profile and optionally apply bounded modifications that Codex knows how to validate.",
-          "type": "object",
-          "required": [
-            "id",
-            "type"
-          ],
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "modifications": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "items": {
-                "$ref": "#/definitions/PermissionProfileModificationParams"
-              }
-            },
-            "type": {
-              "type": "string",
-              "enum": [
-                "profile"
-              ],
-              "title": "ProfilePermissionProfileSelectionParamsType"
-            }
-          },
-          "title": "ProfilePermissionProfileSelectionParams"
-        }
       ]
     },
     "Personality": {
@@ -522,6 +470,17 @@
             "url"
           ],
           "properties": {
+            "detail": {
+              "default": null,
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ImageDetail"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "type": {
               "type": "string",
               "enum": [
@@ -542,6 +501,17 @@
             "type"
           ],
           "properties": {
+            "detail": {
+              "default": null,
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ImageDetail"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "path": {
               "type": "string"
             },

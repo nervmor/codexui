@@ -16,7 +16,7 @@ import {
   rollbackThread,
   getThreadGroups,
   getWorkspaceRootsState,
-  setDefaultModel,
+  writeDefaultModelConfig,
   setWorkspaceRootsState,
   getThreadTitleCache,
   persistThreadTitle,
@@ -966,7 +966,7 @@ export function useDesktopState() {
     )
 
     try {
-      await setDefaultModel(fallbackModelId)
+      await writeDefaultModelConfig(fallbackModelId)
     } catch {
       // Keep local selection even when persisting default model fails.
     }
