@@ -543,7 +543,7 @@ const fileAttachments = ref<FileAttachment[]>([])
 const folderUploadGroups = ref<FolderUploadGroup[]>([])
 const isGoalPanelOpen = ref(false)
 const goalObjectiveDraft = ref('')
-const goalTokenBudgetDraft = ref('')
+const goalTokenBudgetDraft = ref<string | number>('')
 const localGoalError = ref('')
 
 const dictationFeedback = ref('')
@@ -946,7 +946,7 @@ function parseGoalCommand(text: string): UiThreadGoalCommand | null {
 }
 
 function readGoalBudgetDraft(): number | null {
-  const raw = goalTokenBudgetDraft.value.trim()
+  const raw = String(goalTokenBudgetDraft.value ?? '').trim()
   if (!raw) return null
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null
