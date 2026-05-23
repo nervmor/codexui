@@ -218,6 +218,13 @@ If a finding conflicts with current official docs or current official code, trea
   - Run build/typecheck.
   - Run Playwright in headless mode and capture a screenshot showing sidebar order.
 
+## Findings: Goals App-Server Workflow (2026-05-23)
+
+- Official Codex docs define `/goal` as a durable objective for long-running work. Supported user controls are set with `/goal <objective>`, view with `/goal`, pause with `/goal pause`, resume with `/goal resume`, and clear with `/goal clear`.
+- Current official app-server README documents `thread/goal/set`, `thread/goal/get`, and `thread/goal/clear` as stable thread RPCs for the single persisted goal on a materialized thread.
+- Goal state changes stream via `thread/goal/updated` with the full `goal` payload and `thread/goal/cleared` with the `threadId`; UI clients can update local goal state directly from these notifications without forcing a full message refresh.
+- `ThreadGoal` fields used by UI: `threadId`, `objective`, `status`, `tokenBudget`, `tokensUsed`, `timeUsedSeconds`, `createdAt`, and `updatedAt`. Known statuses: `active`, `paused`, `blocked`, `usageLimited`, `budgetLimited`, and `complete`.
+
 ## Findings: Worktrees And Branch Selection (2026-05-01)
 
 - Official Codex worktree guidance is documented at `https://developers.openai.com/codex/app/worktrees/`.

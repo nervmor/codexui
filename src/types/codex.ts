@@ -198,6 +198,25 @@ export type UiPlanData = {
   isStreaming?: boolean
 }
 
+export type UiThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete'
+
+export type UiThreadGoal = {
+  threadId: string
+  objective: string
+  status: UiThreadGoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  timeUsedSeconds: number
+  createdAt: number
+  updatedAt: number
+}
+
+export type UiThreadGoalCommand =
+  | { action: 'show' }
+  | { action: 'set'; objective: string; tokenBudget?: number | null }
+  | { action: 'setStatus'; status: UiThreadGoalStatus }
+  | { action: 'clear' }
+
 export type UiMessage = {
   id: string
   role: 'user' | 'assistant' | 'system'

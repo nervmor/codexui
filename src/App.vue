@@ -263,6 +263,9 @@
                   :plugins="composerPluginOptions"
                   :apps="composerAppOptions"
                   :thread-token-usage="selectedThreadTokenUsage"
+                  :thread-goal="selectedThreadGoal"
+                  :thread-goal-error="selectedThreadGoalError"
+                  :is-thread-goal-pending="isSelectedThreadGoalPending"
                   :codex-quota="codexQuota"
                   :is-turn-in-progress="false"
                   :is-interrupting-turn="false" :send-with-enter="sendWithEnter" :in-progress-submit-mode="inProgressSendMode"
@@ -273,6 +276,7 @@
                   :branch-disabled="composerBranchDisabled"
                   :branch-status="composerBranchStatus"
                   @submit="onSubmitThreadMessage"
+                  @goal-command="onThreadGoalCommand"
                   @update:selected-collaboration-mode="onSelectCollaborationMode"
                   @update:selected-model="onSelectModel" @update:selected-reasoning-effort="onSelectReasoningEffort"
                   @update:selected-branch="onSelectComposerBranch" />
@@ -315,6 +319,9 @@
                     :plugins="composerPluginOptions"
                     :apps="composerAppOptions"
                     :thread-token-usage="selectedThreadTokenUsage"
+                    :thread-goal="selectedThreadGoal"
+                    :thread-goal-error="selectedThreadGoalError"
+                    :is-thread-goal-pending="isSelectedThreadGoalPending"
                     :codex-quota="codexQuota"
                     :is-turn-in-progress="isSelectedThreadInProgress" :is-interrupting-turn="isInterruptingTurn"
                     :has-queue-above="selectedThreadQueuedMessages.length > 0"
@@ -326,6 +333,7 @@
                     :branch-disabled="composerBranchDisabled"
                     :branch-status="composerBranchStatus"
                     @update:selected-collaboration-mode="onSelectCollaborationMode"
+                    @goal-command="onThreadGoalCommand"
                     @submit="onSubmitThreadMessage" @update:selected-model="onSelectModel"
                     @update:selected-reasoning-effort="onSelectReasoningEffort" @interrupt="onInterruptTurn" />
                 </div>
@@ -372,7 +380,15 @@ import {
   switchGitBranch,
   switchAccount,
 } from './api/codexGateway'
-import type { ReasoningEffort, ThreadScrollState, UiAccountEntry, UiGitRepositoryState, UiRateLimitSnapshot, UiRateLimitWindow } from './types/codex'
+import type {
+  ReasoningEffort,
+  ThreadScrollState,
+  UiAccountEntry,
+  UiGitRepositoryState,
+  UiRateLimitSnapshot,
+  UiRateLimitWindow,
+  UiThreadGoalCommand,
+} from './types/codex'
 import { buildFilesRouteLocation } from './utils/fileExplorer'
 
 const ThreadConversation = defineAsyncComponent(() => import('./components/content/ThreadConversation.vue'))
@@ -395,6 +411,9 @@ const {
   selectedLiveOverlay,
   codexQuota,
   selectedThreadTokenUsage,
+  selectedThreadGoal,
+  selectedThreadGoalError,
+  isSelectedThreadGoalPending,
   selectedThreadId,
   availableCollaborationModes,
   availableModels,
@@ -417,7 +436,9 @@ const {
   forkThreadFromTurn,
   sendMessageToSelectedThread,
   sendMessageToNewThread,
+  startGoalOnNewThread,
   interruptSelectedThreadTurn,
+  runSelectedThreadGoalCommand,
   selectedThreadQueuedMessages,
   removeQueuedMessage,
   steerQueuedMessage,
@@ -1225,6 +1246,30 @@ function onSubmitThreadMessage(payload: {
     return
   }
   void sendMessageToSelectedThread(text, payload.imageUrls, payload.skills, payload.mentions, payload.mode, payload.fileAttachments)
+}
+
+function onThreadGoalCommand(command: UiThreadGoalCommand): void {
+  if (isHomeRoute.value) {
+    if (command.action !== 'set') return
+    void startGoalThread(command)
+    return
+  }
+
+  void runSelectedThreadGoalCommand(command)
+}
+
+async function startGoalThread(command: Extract<UiThreadGoalCommand, { action: 'set' }>): Promise<void> {
+  try {
+    const threadId = await startGoalOnNewThread(
+      newThreadCwd.value,
+      command.objective,
+      command.tokenBudget ?? null,
+    )
+    if (!threadId) return
+    await router.replace({ name: 'thread', params: { threadId } })
+  } catch {
+    // Error is already reflected in state.
+  }
 }
 
 function scheduleMobileConversationJumpToLatest(): void {

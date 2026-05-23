@@ -9,3 +9,5 @@ export type { UserInput } from '../../documentation/app-server-schemas/typescrip
 export type { ModelListResponse } from '../../documentation/app-server-schemas/typescript/v2/ModelListResponse'
 export type { ConfigReadResponse } from '../../documentation/app-server-schemas/typescript/v2/ConfigReadResponse'
 export type { ReasoningEffort } from '../../documentation/app-server-schemas/typescript/ReasoningEffort'
+export type { ThreadGoal } from '../../documentation/app-server-schemas/typescript/v2/ThreadGoal'
+export type { ThreadGoalStatus } from '../../documentation/app-server-schemas/typescript/v2/ThreadGoalStatus'

@@ -11,6 +11,8 @@ import type {
   ConfigReadResponse,
   ModelListResponse,
   ReasoningEffort,
+  ThreadGoal,
+  ThreadGoalStatus,
   ThreadListResponse,
   ThreadReadResponse,
   TurnStartResponse,
@@ -51,11 +53,31 @@ import type {
   UiReviewWorkspaceView,
   UiRateLimitSnapshot,
   UiRateLimitWindow,
+  UiThreadGoal,
+  UiThreadGoalStatus,
 } from '../types/codex'
 
 type CurrentModelConfig = {
   model: string
   reasoningEffort: ReasoningEffort | ''
+}
+
+type ThreadGoalGetResponse = {
+  goal: ThreadGoal | null
+}
+
+type ThreadGoalSetResponse = {
+  goal: ThreadGoal
+}
+
+type ThreadGoalClearResponse = {
+  cleared: boolean
+}
+
+export type ThreadGoalSetPayload = {
+  objective?: string
+  status?: ThreadGoalStatus
+  tokenBudget?: number | null
 }
 
 type ResolvedCollaborationModeSettings = {
@@ -393,6 +415,38 @@ function normalizeReasoningEffort(value: unknown): ReasoningEffort | '' {
   return typeof value === 'string' && allowed.includes(value as ReasoningEffort)
     ? (value as ReasoningEffort)
     : ''
+}
+
+function normalizeThreadGoalStatus(value: unknown): UiThreadGoalStatus {
+  const allowed: UiThreadGoalStatus[] = ['active', 'paused', 'blocked', 'usageLimited', 'budgetLimited', 'complete']
+  return typeof value === 'string' && allowed.includes(value as UiThreadGoalStatus)
+    ? (value as UiThreadGoalStatus)
+    : 'active'
+}
+
+export function normalizeThreadGoalPayload(value: unknown): UiThreadGoal | null {
+  const record = asRecord(value)
+  if (!record) return null
+
+  const threadId = readString(record.threadId ?? record.thread_id)
+  const objective = readString(record.objective)
+  if (!threadId || !objective) return null
+
+  return {
+    threadId,
+    objective,
+    status: normalizeThreadGoalStatus(record.status),
+    tokenBudget: readNumber(record.tokenBudget ?? record.token_budget),
+    tokensUsed: readNumber(record.tokensUsed ?? record.tokens_used) ?? 0,
+    timeUsedSeconds: readNumber(record.timeUsedSeconds ?? record.time_used_seconds) ?? 0,
+    createdAt: readNumber(record.createdAt ?? record.created_at) ?? 0,
+    updatedAt: readNumber(record.updatedAt ?? record.updated_at) ?? 0,
+  }
+}
+
+function normalizeThreadGoalResponse(payload: unknown): UiThreadGoal | null {
+  const record = asRecord(payload)
+  return normalizeThreadGoalPayload(record?.goal)
 }
 
 async function getThreadGroupsV2(): Promise<UiProjectGroup[]> {
@@ -799,6 +853,69 @@ export async function archiveThread(threadId: string): Promise<void> {
 
 export async function renameThread(threadId: string, threadName: string): Promise<void> {
   await callRpc('thread/name/set', { threadId, name: threadName })
+}
+
+export async function getThreadGoal(threadId: string): Promise<UiThreadGoal | null> {
+  const normalizedThreadId = threadId.trim()
+  if (!normalizedThreadId) return null
+
+  try {
+    const payload = await callRpc<ThreadGoalGetResponse>('thread/goal/get', {
+      threadId: normalizedThreadId,
+    })
+    return normalizeThreadGoalResponse(payload)
+  } catch (error) {
+    throw normalizeCodexApiError(error, `Failed to load goal for thread ${normalizedThreadId}`, 'thread/goal/get')
+  }
+}
+
+export async function setThreadGoal(threadId: string, nextGoal: ThreadGoalSetPayload): Promise<UiThreadGoal> {
+  const normalizedThreadId = threadId.trim()
+  if (!normalizedThreadId) {
+    throw new Error('thread/goal/set requires a thread id')
+  }
+
+  const params: Record<string, unknown> = {
+    threadId: normalizedThreadId,
+  }
+
+  if (typeof nextGoal.objective === 'string') {
+    const objective = nextGoal.objective.trim()
+    if (objective) {
+      params.objective = objective
+    }
+  }
+  if (nextGoal.status) {
+    params.status = nextGoal.status
+  }
+  if ('tokenBudget' in nextGoal) {
+    params.tokenBudget = nextGoal.tokenBudget ?? null
+  }
+
+  try {
+    const payload = await callRpc<ThreadGoalSetResponse>('thread/goal/set', params)
+    const goal = normalizeThreadGoalResponse(payload)
+    if (!goal) {
+      throw new Error('thread/goal/set did not return a goal')
+    }
+    return goal
+  } catch (error) {
+    throw normalizeCodexApiError(error, `Failed to update goal for thread ${normalizedThreadId}`, 'thread/goal/set')
+  }
+}
+
+export async function clearThreadGoal(threadId: string): Promise<boolean> {
+  const normalizedThreadId = threadId.trim()
+  if (!normalizedThreadId) return false
+
+  try {
+    const payload = await callRpc<ThreadGoalClearResponse>('thread/goal/clear', {
+      threadId: normalizedThreadId,
+    })
+    return payload.cleared === true
+  } catch (error) {
+    throw normalizeCodexApiError(error, `Failed to clear goal for thread ${normalizedThreadId}`, 'thread/goal/clear')
+  }
 }
 
 export async function rollbackThread(threadId: string, numTurns: number): Promise<UiMessage[]> {
