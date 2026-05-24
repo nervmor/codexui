@@ -4,107 +4,6 @@
       {{ dictationErrorText }}
     </p>
 
-    <section
-      v-if="shouldShowGoalPanel"
-      class="thread-composer-goal-panel"
-      :data-status="threadGoalStatusTone"
-      aria-live="polite"
-    >
-      <div class="thread-composer-goal-header">
-        <div class="thread-composer-goal-heading">
-          <span class="thread-composer-goal-title">Goal</span>
-          <span v-if="threadGoal" class="thread-composer-goal-status">
-            {{ threadGoalStatusLabel }}
-          </span>
-        </div>
-        <button
-          v-if="isGoalPanelOpen"
-          class="thread-composer-goal-icon-button"
-          type="button"
-          aria-label="Close goal panel"
-          @click="closeGoalPanel"
-        >
-          <IconTablerX class="thread-composer-goal-icon" />
-        </button>
-      </div>
-
-      <p v-if="threadGoal" class="thread-composer-goal-objective">{{ threadGoal.objective }}</p>
-      <p v-else class="thread-composer-goal-empty">No active goal</p>
-
-      <div v-if="threadGoal" class="thread-composer-goal-meta">
-        <span>{{ goalUsageText }}</span>
-        <span v-if="goalBudgetText">{{ goalBudgetText }}</span>
-        <span>{{ goalTimeText }}</span>
-      </div>
-
-      <p v-if="displayGoalError" class="thread-composer-goal-error">{{ displayGoalError }}</p>
-
-      <div v-if="threadGoal" class="thread-composer-goal-actions">
-        <button
-          v-if="threadGoal.status === 'paused'"
-          class="thread-composer-goal-button thread-composer-goal-button-primary"
-          type="button"
-          :disabled="isGoalActionDisabled"
-          @click="emitGoalStatus('active')"
-        >
-          Resume
-        </button>
-        <button
-          v-else
-          class="thread-composer-goal-button"
-          type="button"
-          :disabled="isGoalActionDisabled"
-          @click="emitGoalStatus('paused')"
-        >
-          Pause
-        </button>
-        <button
-          class="thread-composer-goal-button"
-          type="button"
-          :disabled="isGoalActionDisabled"
-          @click="openGoalPanel"
-        >
-          Edit
-        </button>
-        <button
-          class="thread-composer-goal-button"
-          type="button"
-          :disabled="isGoalActionDisabled"
-          @click="emitGoalClear"
-        >
-          Clear
-        </button>
-      </div>
-
-      <div v-if="isGoalPanelOpen || !threadGoal" class="thread-composer-goal-editor">
-        <textarea
-          v-model="goalObjectiveDraft"
-          class="thread-composer-goal-input"
-          placeholder="Objective"
-          :disabled="isGoalActionDisabled"
-        />
-        <div class="thread-composer-goal-editor-row">
-          <input
-            v-model="goalTokenBudgetDraft"
-            class="thread-composer-goal-budget-input"
-            type="number"
-            min="1"
-            step="1000"
-            placeholder="Token budget"
-            :disabled="isGoalActionDisabled"
-          />
-          <button
-            class="thread-composer-goal-button thread-composer-goal-button-primary"
-            type="button"
-            :disabled="isGoalActionDisabled || goalObjectiveDraft.trim().length === 0"
-            @click="submitGoalDraft"
-          >
-            Set Goal
-          </button>
-        </div>
-      </div>
-    </section>
-
     <div class="thread-composer-shell" :class="{ 'thread-composer-shell--no-top-radius': hasQueueAbove }">
       <div v-if="selectedImages.length > 0" class="thread-composer-attachments">
         <div v-for="image in selectedImages" :key="image.id" class="thread-composer-attachment">
@@ -272,22 +171,125 @@
         </div>
 
         <template v-if="!isDictationRecording">
-          <button
-            class="thread-composer-goal-trigger"
-            :class="{ 'is-active': isGoalPanelOpen || Boolean(threadGoal) }"
-            type="button"
-            :aria-pressed="isGoalPanelOpen"
-            :disabled="isGoalTriggerDisabled"
-            @click="toggleGoalPanel"
-          >
-            <span>/goal</span>
-            <span
-              v-if="threadGoal"
-              class="thread-composer-goal-trigger-dot"
-              :data-status="threadGoal.status"
-              aria-hidden="true"
-            />
-          </button>
+          <div ref="goalMenuRootRef" class="thread-composer-goal-control">
+            <button
+              class="thread-composer-goal-trigger"
+              :class="{ 'is-active': isGoalPanelOpen || Boolean(threadGoal) }"
+              type="button"
+              :aria-pressed="isGoalPanelOpen"
+              :title="threadGoal?.objective || 'Goal'"
+              :disabled="isGoalTriggerDisabled"
+              @click="toggleGoalPanel"
+            >
+              <span>Goal</span>
+              <span
+                v-if="threadGoal"
+                class="thread-composer-goal-trigger-dot"
+                :data-status="threadGoal.status"
+                aria-hidden="true"
+              />
+            </button>
+
+            <section
+              v-if="isGoalPanelOpen"
+              class="thread-composer-goal-popover"
+              :data-status="threadGoalStatusTone"
+              aria-live="polite"
+            >
+              <div class="thread-composer-goal-header">
+                <div class="thread-composer-goal-heading">
+                  <span class="thread-composer-goal-title">Goal</span>
+                  <span v-if="threadGoal" class="thread-composer-goal-status">
+                    {{ threadGoalStatusLabel }}
+                  </span>
+                </div>
+                <button
+                  class="thread-composer-goal-icon-button"
+                  type="button"
+                  aria-label="Close goal panel"
+                  @click="closeGoalPanel"
+                >
+                  <IconTablerX class="thread-composer-goal-icon" />
+                </button>
+              </div>
+
+              <p v-if="threadGoal" class="thread-composer-goal-objective">{{ threadGoal.objective }}</p>
+              <p v-else class="thread-composer-goal-empty">No active goal</p>
+
+              <div v-if="threadGoal" class="thread-composer-goal-meta">
+                <span>{{ goalUsageText }}</span>
+                <span v-if="goalBudgetText">{{ goalBudgetText }}</span>
+                <span>{{ goalTimeText }}</span>
+              </div>
+
+              <p v-if="displayGoalError" class="thread-composer-goal-error">{{ displayGoalError }}</p>
+
+              <div v-if="threadGoal" class="thread-composer-goal-actions">
+                <button
+                  v-if="threadGoal.status === 'paused'"
+                  class="thread-composer-goal-button thread-composer-goal-button-primary"
+                  type="button"
+                  :disabled="isGoalActionDisabled"
+                  @click="emitGoalStatus('active')"
+                >
+                  Resume
+                </button>
+                <button
+                  v-else
+                  class="thread-composer-goal-button"
+                  type="button"
+                  :disabled="isGoalActionDisabled"
+                  @click="emitGoalStatus('paused')"
+                >
+                  Pause
+                </button>
+                <button
+                  class="thread-composer-goal-button"
+                  type="button"
+                  :disabled="isGoalActionDisabled"
+                  @click="openGoalEditor"
+                >
+                  Edit
+                </button>
+                <button
+                  class="thread-composer-goal-button"
+                  type="button"
+                  :disabled="isGoalActionDisabled"
+                  @click="emitGoalClear"
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div v-if="isGoalEditorVisible" class="thread-composer-goal-editor">
+                <textarea
+                  v-model="goalObjectiveDraft"
+                  class="thread-composer-goal-input"
+                  placeholder="Objective"
+                  :disabled="isGoalActionDisabled"
+                />
+                <div class="thread-composer-goal-editor-row">
+                  <input
+                    v-model="goalTokenBudgetDraft"
+                    class="thread-composer-goal-budget-input"
+                    type="number"
+                    min="1"
+                    step="1000"
+                    placeholder="Token budget"
+                    :disabled="isGoalActionDisabled"
+                  />
+                  <button
+                    class="thread-composer-goal-button thread-composer-goal-button-primary"
+                    type="button"
+                    :disabled="isGoalActionDisabled || goalObjectiveDraft.trim().length === 0"
+                    @click="submitGoalDraft"
+                  >
+                    Set Goal
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
 
           <button
             class="thread-composer-plan-toggle"
@@ -542,6 +544,7 @@ const selectedImages = ref<SelectedImage[]>([])
 const fileAttachments = ref<FileAttachment[]>([])
 const folderUploadGroups = ref<FolderUploadGroup[]>([])
 const isGoalPanelOpen = ref(false)
+const isGoalEditorOpen = ref(false)
 const goalObjectiveDraft = ref('')
 const goalTokenBudgetDraft = ref<string | number>('')
 const localGoalError = ref('')
@@ -575,6 +578,7 @@ const {
   },
 })
 const attachMenuRootRef = ref<HTMLElement | null>(null)
+const goalMenuRootRef = ref<HTMLElement | null>(null)
 const photoLibraryInputRef = ref<HTMLInputElement | null>(null)
 const cameraCaptureInputRef = ref<HTMLInputElement | null>(null)
 const folderPickerInputRef = ref<HTMLInputElement | null>(null)
@@ -611,15 +615,13 @@ const isRealThreadContext = computed(() =>
   props.activeThreadId.trim().length > 0 && props.activeThreadId !== '__new-thread__',
 )
 const isGoalActionDisabled = computed(() =>
-  props.disabled === true || props.isThreadGoalPending === true || !isRealThreadContext.value,
+  props.disabled === true || props.isThreadGoalPending === true || props.activeThreadId.trim().length === 0,
 )
-const isGoalTriggerDisabled = computed(() => props.disabled === true || !isRealThreadContext.value)
+const isGoalTriggerDisabled = computed(() => props.disabled === true || props.activeThreadId.trim().length === 0)
 const displayGoalError = computed(() => localGoalError.value.trim() || props.threadGoalError?.trim() || '')
-const shouldShowGoalPanel = computed(() =>
-  Boolean(threadGoal.value) || isGoalPanelOpen.value || displayGoalError.value.length > 0,
-)
 const threadGoalStatusTone = computed(() => threadGoal.value?.status ?? 'none')
 const threadGoalStatusLabel = computed(() => formatGoalStatus(threadGoal.value?.status ?? null))
+const isGoalEditorVisible = computed(() => isGoalPanelOpen.value && (isGoalEditorOpen.value || !threadGoal.value))
 const goalUsageText = computed(() => `${formatCompactTokenCount(threadGoal.value?.tokensUsed ?? 0)} tokens`)
 const goalBudgetText = computed(() => {
   const goal = threadGoal.value
@@ -959,15 +961,23 @@ function syncGoalDraftFromCurrent(): void {
     : ''
 }
 
-function openGoalPanel(): void {
+function openGoalPanel(options: { edit?: boolean } = {}): void {
   syncGoalDraftFromCurrent()
   localGoalError.value = ''
   isGoalPanelOpen.value = true
+  isGoalEditorOpen.value = options.edit === true || !threadGoal.value
 }
 
 function closeGoalPanel(): void {
   isGoalPanelOpen.value = false
+  isGoalEditorOpen.value = false
   localGoalError.value = ''
+}
+
+function openGoalEditor(): void {
+  syncGoalDraftFromCurrent()
+  localGoalError.value = ''
+  isGoalEditorOpen.value = true
 }
 
 function toggleGoalPanel(): void {
@@ -989,6 +999,7 @@ function submitGoalDraft(): void {
     objective,
     tokenBudget: readGoalBudgetDraft(),
   })
+  isGoalEditorOpen.value = false
 }
 
 function emitGoalStatus(status: UiThreadGoalStatus): void {
@@ -1007,8 +1018,8 @@ function onSubmit(mode: 'steer' | 'queue' = 'steer'): void {
   const goalCommand = parseGoalCommand(text)
   if (goalCommand) {
     if (goalCommand.action !== 'set' && !isRealThreadContext.value) {
+      openGoalPanel({ edit: false })
       localGoalError.value = 'Open a thread before using this goal command.'
-      isGoalPanelOpen.value = true
     } else {
       localGoalError.value = ''
       if (goalCommand.action === 'show') {
@@ -1453,12 +1464,22 @@ function isMarkdownFile(path: string): boolean {
 }
 
 function onDocumentClick(event: MouseEvent): void {
-  if (!isAttachMenuOpen.value) return
-  const root = attachMenuRootRef.value
-  if (!root) return
   const target = event.target as Node | null
-  if (!target || root.contains(target)) return
-  isAttachMenuOpen.value = false
+  if (!target) return
+
+  if (isAttachMenuOpen.value) {
+    const attachRoot = attachMenuRootRef.value
+    if (attachRoot && !attachRoot.contains(target)) {
+      isAttachMenuOpen.value = false
+    }
+  }
+
+  if (isGoalPanelOpen.value) {
+    const goalRoot = goalMenuRootRef.value
+    if (goalRoot && !goalRoot.contains(target)) {
+      closeGoalPanel()
+    }
+  }
 }
 
 onMounted(() => {
@@ -1485,6 +1506,7 @@ watch(
     dictationFeedback.value = ''
     localGoalError.value = ''
     isGoalPanelOpen.value = false
+    isGoalEditorOpen.value = false
     syncGoalDraftFromCurrent()
     isAttachMenuOpen.value = false
     closeFileMention()
@@ -1494,6 +1516,9 @@ watch(
 watch(
   () => props.threadGoal,
   () => {
+    if (threadGoal.value && isGoalPanelOpen.value) {
+      isGoalEditorOpen.value = false
+    }
     if (!isGoalPanelOpen.value) {
       syncGoalDraftFromCurrent()
     }
@@ -1517,25 +1542,25 @@ watch(
   @apply w-full max-w-175 mx-auto px-2 sm:px-6;
 }
 
-.thread-composer-goal-panel {
-  @apply mb-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 shadow-sm;
+.thread-composer-goal-popover {
+  @apply absolute bottom-[calc(100%+10px)] left-0 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 shadow-xl;
 }
 
-.thread-composer-goal-panel[data-status='active'] {
+.thread-composer-goal-popover[data-status='active'] {
   @apply border-sky-200 bg-sky-50;
 }
 
-.thread-composer-goal-panel[data-status='paused'] {
+.thread-composer-goal-popover[data-status='paused'] {
   @apply border-amber-200 bg-amber-50;
 }
 
-.thread-composer-goal-panel[data-status='blocked'],
-.thread-composer-goal-panel[data-status='usageLimited'],
-.thread-composer-goal-panel[data-status='budgetLimited'] {
+.thread-composer-goal-popover[data-status='blocked'],
+.thread-composer-goal-popover[data-status='usageLimited'],
+.thread-composer-goal-popover[data-status='budgetLimited'] {
   @apply border-rose-200 bg-rose-50;
 }
 
-.thread-composer-goal-panel[data-status='complete'] {
+.thread-composer-goal-popover[data-status='complete'] {
   @apply border-emerald-200 bg-emerald-50;
 }
 
@@ -1894,12 +1919,16 @@ watch(
   @apply truncate;
 }
 
+.thread-composer-goal-control {
+  @apply relative shrink-0;
+}
+
 .thread-composer-goal-trigger {
-  @apply inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-sm leading-none text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-400 disabled:hover:bg-transparent;
+  @apply inline-flex h-7 shrink-0 items-center gap-1.5 border-0 bg-transparent p-0 text-sm leading-none text-zinc-500 transition hover:text-zinc-700 disabled:cursor-not-allowed disabled:text-zinc-400;
 }
 
 .thread-composer-goal-trigger.is-active {
-  @apply text-zinc-800;
+  @apply text-zinc-700;
 }
 
 .thread-composer-goal-trigger-dot {
