@@ -213,7 +213,13 @@ export type UiThreadGoal = {
 
 export type UiThreadGoalCommand =
   | { action: 'show' }
-  | { action: 'set'; objective: string; tokenBudget?: number | null }
+  | {
+      action: 'set'
+      objective: string
+      status?: UiThreadGoalStatus
+      tokenBudget?: number | null
+      mode?: 'replace' | 'updateExisting'
+    }
   | { action: 'setStatus'; status: UiThreadGoalStatus }
   | { action: 'clear' }
 

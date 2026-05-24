@@ -1183,9 +1183,12 @@ export function useDesktopState() {
       }
 
       if (command.action === 'set') {
+        if (command.mode !== 'updateExisting' && threadGoalByThreadId.value[normalizedThreadId]) {
+          await clearThreadGoalRpc(normalizedThreadId)
+        }
         const goal = await setThreadGoalRpc(normalizedThreadId, {
           objective: command.objective,
-          status: 'active',
+          status: command.status ?? 'active',
           tokenBudget: command.tokenBudget ?? null,
         })
         setThreadGoalState(normalizedThreadId, goal)

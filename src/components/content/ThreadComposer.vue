@@ -171,18 +171,22 @@
         </div>
 
         <template v-if="!isDictationRecording">
-          <div class="thread-composer-goal-control">
+          <div ref="goalMenuRootRef" class="thread-composer-goal-control">
             <button
               class="thread-composer-goal-trigger"
               :class="{ 'is-active': isGoalModeSelected || Boolean(threadGoal) }"
               type="button"
-              :aria-label="isGoalModeSelected ? 'Disable goal mode' : 'Enable goal mode'"
+              :aria-label="goalTriggerAriaLabel"
               :aria-pressed="isGoalModeSelected"
-              :title="threadGoal?.objective || 'Goal'"
+              :aria-expanded="isGoalMenuOpen"
+              :title="goalTriggerTitle"
               :disabled="isGoalTriggerDisabled"
-              @click="toggleGoalMode"
+              @click="onGoalTriggerClick"
             >
               <span>Goal</span>
+              <span v-if="goalTriggerMetaText" class="thread-composer-goal-trigger-meta">
+                {{ goalTriggerMetaText }}
+              </span>
               <span
                 v-if="threadGoal"
                 class="thread-composer-goal-trigger-dot"
@@ -190,6 +194,59 @@
                 aria-hidden="true"
               />
             </button>
+
+            <div v-if="isGoalMenuOpen" class="thread-composer-goal-menu">
+              <template v-if="pendingGoalReplacement">
+                <div class="thread-composer-goal-menu-title">Replace goal?</div>
+                <p class="thread-composer-goal-menu-hint">New objective: {{ pendingGoalReplacement.objective }}</p>
+                <div class="thread-composer-goal-menu-actions">
+                  <button type="button" :disabled="isInteractionDisabled || isThreadGoalPending" @click="confirmGoalReplacement">Replace current goal</button>
+                  <button type="button" @click="cancelGoalReplacement">Cancel</button>
+                </div>
+              </template>
+              <template v-else-if="threadGoal">
+                <div class="thread-composer-goal-menu-title">Goal</div>
+                <dl class="thread-composer-goal-summary">
+                  <div>
+                    <dt>Status</dt>
+                    <dd>{{ goalStatusText }}</dd>
+                  </div>
+                  <div>
+                    <dt>Objective</dt>
+                    <dd>{{ threadGoal.objective }}</dd>
+                  </div>
+                  <div>
+                    <dt>Time used</dt>
+                    <dd>{{ goalElapsedText }}</dd>
+                  </div>
+                  <div>
+                    <dt>Tokens used</dt>
+                    <dd>{{ goalTokensUsedText }}</dd>
+                  </div>
+                  <div v-if="goalTokenBudgetText">
+                    <dt>Token budget</dt>
+                    <dd>{{ goalTokenBudgetText }}</dd>
+                  </div>
+                </dl>
+                <div class="thread-composer-goal-menu-actions">
+                  <button type="button" :disabled="isInteractionDisabled" @click="beginGoalEdit">Edit</button>
+                  <button
+                    v-if="goalStatusAction"
+                    type="button"
+                    :disabled="isInteractionDisabled || isThreadGoalPending"
+                    @click="emitGoalStatusAction"
+                  >{{ goalStatusAction.label }}</button>
+                  <button type="button" :disabled="isInteractionDisabled || isThreadGoalPending" @click="emitGoalClear">Clear</button>
+                </div>
+                <p v-if="goalCommandHintText" class="thread-composer-goal-menu-hint">{{ goalCommandHintText }}</p>
+              </template>
+              <template v-else>
+                <div class="thread-composer-goal-menu-title">Usage: /goal &lt;objective&gt;</div>
+                <p class="thread-composer-goal-menu-hint">No goal is currently set.</p>
+              </template>
+              <p v-if="props.threadGoalError" class="thread-composer-goal-menu-error">{{ props.threadGoalError }}</p>
+              <p v-else-if="isThreadGoalPending" class="thread-composer-goal-menu-hint">Updating goal...</p>
+            </div>
           </div>
 
           <button
@@ -438,11 +495,17 @@ type FolderUploadGroup = {
   isUploading: boolean
 }
 
+type ParsedGoalCommand = UiThreadGoalCommand | { action: 'edit' }
+type SetGoalCommand = Extract<UiThreadGoalCommand, { action: 'set' }>
+
 const draft = ref('')
 const selectedImages = ref<SelectedImage[]>([])
 const fileAttachments = ref<FileAttachment[]>([])
 const folderUploadGroups = ref<FolderUploadGroup[]>([])
 const isGoalModeSelected = ref(false)
+const isGoalEditModeSelected = ref(false)
+const isGoalMenuOpen = ref(false)
+const pendingGoalReplacement = ref<SetGoalCommand | null>(null)
 
 const dictationFeedback = ref('')
 const {
@@ -473,6 +536,7 @@ const {
   },
 })
 const attachMenuRootRef = ref<HTMLElement | null>(null)
+const goalMenuRootRef = ref<HTMLElement | null>(null)
 const photoLibraryInputRef = ref<HTMLInputElement | null>(null)
 const cameraCaptureInputRef = ref<HTMLInputElement | null>(null)
 const folderPickerInputRef = ref<HTMLInputElement | null>(null)
@@ -505,10 +569,55 @@ const modelOptions = computed(() =>
 )
 const isPlanModeSelected = computed(() => props.selectedCollaborationMode === 'plan')
 const threadGoal = computed(() => props.threadGoal ?? null)
+const isThreadGoalPending = computed(() => props.isThreadGoalPending === true)
 const isRealThreadContext = computed(() =>
   props.activeThreadId.trim().length > 0 && props.activeThreadId !== '__new-thread__',
 )
 const isGoalTriggerDisabled = computed(() => props.disabled === true || props.activeThreadId.trim().length === 0)
+const goalStatusText = computed(() => threadGoal.value ? formatGoalStatus(threadGoal.value.status) : '')
+const goalElapsedText = computed(() => formatGoalElapsedSeconds(threadGoal.value?.timeUsedSeconds ?? 0))
+const goalTokensUsedText = computed(() => formatGoalTokenCount(threadGoal.value?.tokensUsed ?? 0))
+const goalTokenBudgetText = computed(() => {
+  const tokenBudget = threadGoal.value?.tokenBudget
+  return typeof tokenBudget === 'number' ? formatGoalTokenCount(tokenBudget) : ''
+})
+const goalUsageText = computed(() => {
+  const goal = threadGoal.value
+  if (!goal) return ''
+  if (typeof goal.tokenBudget === 'number') {
+    return `${formatGoalTokenCount(goal.tokensUsed)} / ${formatGoalTokenCount(goal.tokenBudget)}`
+  }
+  return formatGoalElapsedSeconds(goal.timeUsedSeconds)
+})
+const goalTriggerMetaText = computed(() => {
+  const goal = threadGoal.value
+  if (!goal) return ''
+  const usage = goalUsageText.value
+  return usage ? `${formatGoalStatus(goal.status)} · ${usage}` : formatGoalStatus(goal.status)
+})
+const goalTriggerTitle = computed(() => threadGoal.value?.objective || 'Goal')
+const goalTriggerAriaLabel = computed(() => {
+  if (threadGoal.value) return isGoalMenuOpen.value ? 'Hide goal summary' : 'Show goal summary'
+  return isGoalModeSelected.value ? 'Disable goal mode' : 'Enable goal mode'
+})
+const goalStatusAction = computed<{ label: string; status: UiThreadGoal['status'] } | null>(() => {
+  const goal = threadGoal.value
+  if (!goal) return null
+  if (goal.status === 'active') return { label: 'Pause', status: 'paused' }
+  if (goal.status === 'paused' || goal.status === 'blocked' || goal.status === 'usageLimited') {
+    return { label: 'Resume', status: 'active' }
+  }
+  return null
+})
+const goalCommandHintText = computed(() => {
+  const goal = threadGoal.value
+  if (!goal) return ''
+  if (goal.status === 'active') return 'Commands: /goal edit, /goal pause, /goal clear'
+  if (goal.status === 'paused' || goal.status === 'blocked' || goal.status === 'usageLimited') {
+    return 'Commands: /goal edit, /goal resume, /goal clear'
+  }
+  return 'Commands: /goal edit, /goal clear'
+})
 
 const isPlanModeWaitingForModel = computed(() =>
   props.selectedCollaborationMode === 'plan' && props.selectedModel.trim().length === 0,
@@ -555,7 +664,7 @@ const placeholderText = computed(() =>
     : isPlanModeWaitingForModel.value
       ? 'Loading models for plan mode...'
       : isGoalModeSelected.value
-        ? 'Describe the goal...'
+        ? isGoalEditModeSelected.value ? 'Edit the goal...' : 'Describe the goal...'
       : 'Type a message... (@ for files)',
 )
 const quotaSummaryText = computed(() => buildQuotaSummaryText(props.codexQuota ?? null))
@@ -714,6 +823,43 @@ function formatCompactTokenCount(value: number): string {
   return String(Math.round(value))
 }
 
+function formatGoalTokenCount(value: number): string {
+  return formatCompactTokenCount(value).replace('k', 'K')
+}
+
+function formatGoalElapsedSeconds(value: number): string {
+  const seconds = Math.max(0, Math.floor(value))
+  if (seconds < 60) return `${seconds}s`
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24)
+    const remainingHours = hours % 24
+    return `${days}d ${remainingHours}h ${remainingMinutes}m`
+  }
+
+  return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`
+}
+
+function formatGoalStatus(status: UiThreadGoal['status']): string {
+  if (status === 'usageLimited') return 'usage limited'
+  if (status === 'budgetLimited') return 'limited by budget'
+  return status
+}
+
+function editedGoalStatus(status: UiThreadGoal['status']): UiThreadGoal['status'] {
+  if (status === 'budgetLimited' || status === 'complete') return 'active'
+  return status
+}
+
+function shouldConfirmBeforeReplacingGoal(goal: UiThreadGoal): boolean {
+  return goal.status !== 'complete'
+}
+
 function formatBreakdownSummary(breakdown: UiTokenUsageBreakdown): string {
   const nonCachedInput = Math.max(0, breakdown.inputTokens - breakdown.cachedInputTokens)
   const parts = [
@@ -778,7 +924,7 @@ function buildContextUsageView(
   }
 }
 
-function parseGoalCommand(text: string): UiThreadGoalCommand | null {
+function parseGoalCommand(text: string): ParsedGoalCommand | null {
   const match = text.match(/^\/goal(?:\s+([\s\S]*))?$/iu)
   if (!match) return null
 
@@ -788,6 +934,7 @@ function parseGoalCommand(text: string): UiThreadGoalCommand | null {
   const command = body.toLowerCase()
   if (command === 'pause') return { action: 'setStatus', status: 'paused' }
   if (command === 'resume') return { action: 'setStatus', status: 'active' }
+  if (command === 'edit') return { action: 'edit' }
   if (command === 'clear') return { action: 'clear' }
 
   return {
@@ -810,7 +957,80 @@ function focusComposerAtEnd(): void {
 function toggleGoalMode(): void {
   if (isGoalTriggerDisabled.value) return
   isGoalModeSelected.value = !isGoalModeSelected.value
+  if (!isGoalModeSelected.value) {
+    isGoalEditModeSelected.value = false
+  }
   focusComposerAtEnd()
+}
+
+function onGoalTriggerClick(): void {
+  if (isGoalTriggerDisabled.value) return
+  if (threadGoal.value) {
+    isGoalMenuOpen.value = !isGoalMenuOpen.value
+    return
+  }
+  isGoalMenuOpen.value = false
+  toggleGoalMode()
+}
+
+function resetGoalComposerMode(): void {
+  isGoalModeSelected.value = false
+  isGoalEditModeSelected.value = false
+  pendingGoalReplacement.value = null
+}
+
+function beginGoalEdit(): void {
+  const goal = threadGoal.value
+  if (!goal) return
+  pendingGoalReplacement.value = null
+  draft.value = goal.objective
+  isGoalModeSelected.value = true
+  isGoalEditModeSelected.value = true
+  isGoalMenuOpen.value = false
+  focusComposerAtEnd()
+}
+
+function confirmGoalReplacement(): void {
+  const command = pendingGoalReplacement.value
+  if (!command) return
+  emit('goalCommand', command)
+  pendingGoalReplacement.value = null
+  isGoalMenuOpen.value = false
+  resetGoalComposerMode()
+}
+
+function cancelGoalReplacement(): void {
+  pendingGoalReplacement.value = null
+  isGoalMenuOpen.value = Boolean(threadGoal.value)
+  nextTick(() => inputRef.value?.focus())
+}
+
+function emitGoalStatusAction(): void {
+  const action = goalStatusAction.value
+  if (!action) return
+  emit('goalCommand', { action: 'setStatus', status: action.status })
+  isGoalMenuOpen.value = false
+}
+
+function emitGoalClear(): void {
+  emit('goalCommand', { action: 'clear' })
+  pendingGoalReplacement.value = null
+  isGoalMenuOpen.value = false
+  resetGoalComposerMode()
+}
+
+function showGoalMenu(): void {
+  isGoalMenuOpen.value = true
+  nextTick(() => inputRef.value?.focus())
+}
+
+function clearComposerSubmissionState(): void {
+  draft.value = ''
+  selectedImages.value = []
+  fileAttachments.value = []
+  folderUploadGroups.value = []
+  isAttachMenuOpen.value = false
+  closeFileMention()
 }
 
 function onSubmit(mode: 'steer' | 'queue' = 'steer'): void {
@@ -818,33 +1038,55 @@ function onSubmit(mode: 'steer' | 'queue' = 'steer'): void {
   if (!canSubmit.value) return
   const goalCommand = parseGoalCommand(text)
   if (goalCommand) {
+    if (goalCommand.action === 'edit') {
+      draft.value = ''
+      if (threadGoal.value) {
+        beginGoalEdit()
+      } else {
+        showGoalMenu()
+      }
+      return
+    }
+    if (goalCommand.action === 'show') {
+      if (isRealThreadContext.value) {
+        emit('goalCommand', goalCommand)
+      }
+      clearComposerSubmissionState()
+      resetGoalComposerMode()
+      showGoalMenu()
+      return
+    }
+    if (
+      goalCommand.action === 'set' &&
+      threadGoal.value &&
+      shouldConfirmBeforeReplacingGoal(threadGoal.value)
+    ) {
+      clearComposerSubmissionState()
+      resetGoalComposerMode()
+      pendingGoalReplacement.value = goalCommand
+      showGoalMenu()
+      return
+    }
     if (goalCommand.action === 'set' || isRealThreadContext.value) {
       emit('goalCommand', goalCommand)
     }
-    draft.value = ''
-    isGoalModeSelected.value = false
-    selectedImages.value = []
-    fileAttachments.value = []
-    folderUploadGroups.value = []
-    isAttachMenuOpen.value = false
-    closeFileMention()
+    clearComposerSubmissionState()
+    resetGoalComposerMode()
     nextTick(() => inputRef.value?.focus())
     return
   }
   if (isGoalModeSelected.value) {
     if (!text) return
+    const currentGoal = threadGoal.value
     emit('goalCommand', {
       action: 'set',
       objective: text,
-      tokenBudget: null,
+      status: isGoalEditModeSelected.value && currentGoal ? editedGoalStatus(currentGoal.status) : 'active',
+      tokenBudget: isGoalEditModeSelected.value && currentGoal ? currentGoal.tokenBudget : null,
+      mode: isGoalEditModeSelected.value ? 'updateExisting' : 'replace',
     })
-    draft.value = ''
-    isGoalModeSelected.value = false
-    selectedImages.value = []
-    fileAttachments.value = []
-    folderUploadGroups.value = []
-    isAttachMenuOpen.value = false
-    closeFileMention()
+    clearComposerSubmissionState()
+    resetGoalComposerMode()
     nextTick(() => inputRef.value?.focus())
     return
   }
@@ -1118,6 +1360,12 @@ function onInputChange(): void {
 }
 
 function onInputKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && isGoalMenuOpen.value) {
+    event.preventDefault()
+    isGoalMenuOpen.value = false
+    return
+  }
+
   if (isFileMentionOpen.value) {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -1282,6 +1530,13 @@ function onDocumentClick(event: MouseEvent): void {
       isAttachMenuOpen.value = false
     }
   }
+
+  if (isGoalMenuOpen.value) {
+    const goalRoot = goalMenuRootRef.value
+    if (goalRoot && !goalRoot.contains(target)) {
+      isGoalMenuOpen.value = false
+    }
+  }
 }
 
 onMounted(() => {
@@ -1306,7 +1561,8 @@ watch(
     fileAttachments.value = []
     folderUploadGroups.value = []
     dictationFeedback.value = ''
-    isGoalModeSelected.value = false
+    resetGoalComposerMode()
+    isGoalMenuOpen.value = false
     isAttachMenuOpen.value = false
     closeFileMention()
   },
@@ -1628,6 +1884,10 @@ watch(
   @apply text-zinc-700;
 }
 
+.thread-composer-goal-trigger-meta {
+  @apply hidden max-w-44 truncate text-xs text-zinc-500 sm:inline;
+}
+
 .thread-composer-goal-trigger-dot {
   @apply h-2 w-2 rounded-full bg-zinc-400;
 }
@@ -1648,6 +1908,46 @@ watch(
 
 .thread-composer-goal-trigger-dot[data-status='complete'] {
   @apply bg-emerald-500;
+}
+
+.thread-composer-goal-menu {
+  @apply absolute bottom-9 left-0 z-20 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-800 shadow-lg;
+}
+
+.thread-composer-goal-menu-title {
+  @apply mb-2 text-sm font-semibold text-zinc-950;
+}
+
+.thread-composer-goal-summary {
+  @apply m-0 space-y-1.5;
+}
+
+.thread-composer-goal-summary > div {
+  @apply grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2;
+}
+
+.thread-composer-goal-summary dt {
+  @apply text-xs text-zinc-500;
+}
+
+.thread-composer-goal-summary dd {
+  @apply m-0 min-w-0 break-words text-xs text-zinc-800;
+}
+
+.thread-composer-goal-menu-actions {
+  @apply mt-3 flex flex-wrap gap-2;
+}
+
+.thread-composer-goal-menu-actions button {
+  @apply rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:text-zinc-400;
+}
+
+.thread-composer-goal-menu-hint {
+  @apply mt-2 mb-0 text-xs text-zinc-500;
+}
+
+.thread-composer-goal-menu-error {
+  @apply mt-2 mb-0 text-xs text-rose-600;
 }
 
 .thread-composer-plan-toggle {
