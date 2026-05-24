@@ -609,4 +609,4 @@ If a finding conflicts with current official docs or current official code, trea
   - `/goal` views the current goal.
   - `/goal pause`, `/goal resume`, and `/goal clear` control it.
 - The docs describe the objective as a durable/persistent target for long-running work, and do not expose a first-class token budget input in the app-facing workflow.
-- For CodexUI parity, the composer `Goal` control should insert or activate `/goal ` in the main composer for new goals. Existing active goals can keep a compact status/actions popover, but should not present an Objective/Token budget/Set Goal form.
+- For CodexUI parity, the composer `Goal` control should behave like a lightweight mode label next to `Plan`: selecting it marks the next submitted composer text as the goal objective without visibly inserting `/goal` into the input. Manual `/goal ...` commands remain a compatible fallback, but the visible app-style interaction should stay tag-based and should not present an Objective/Token budget/Set Goal form.
