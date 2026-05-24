@@ -601,3 +601,12 @@ If a finding conflicts with current official docs or current official code, trea
 - `gpt-5.4` is currently marked `isDefault: true` here, so web fallback/retry logic should prefer the app-server default model instead of hardcoding an older fallback such as `gpt-5.2-codex`.
 - Some models expose narrower reasoning sets than the full global enum. For example, `gpt-5.1-codex-mini` only advertises `medium` and `high`, while `gpt-5.3-codex-spark` defaults to `high`.
 - For codexui parity, model pickers should render `displayName`, and Thinking controls should be derived from the selected model's `supportedReasoningEfforts` plus `defaultReasoningEffort`.
+
+## Findings: Goals Composer Entry (2026-05-24)
+
+- Official Codex docs describe goals as a `/goal` slash-command workflow rather than a standalone form:
+  - `/goal <objective>` sets a goal.
+  - `/goal` views the current goal.
+  - `/goal pause`, `/goal resume`, and `/goal clear` control it.
+- The docs describe the objective as a durable/persistent target for long-running work, and do not expose a first-class token budget input in the app-facing workflow.
+- For CodexUI parity, the composer `Goal` control should insert or activate `/goal ` in the main composer for new goals. Existing active goals can keep a compact status/actions popover, but should not present an Objective/Token budget/Set Goal form.

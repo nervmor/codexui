@@ -174,12 +174,12 @@
           <div ref="goalMenuRootRef" class="thread-composer-goal-control">
             <button
               class="thread-composer-goal-trigger"
-              :class="{ 'is-active': isGoalPanelOpen || Boolean(threadGoal) }"
+              :class="{ 'is-active': isGoalComposerActive || Boolean(threadGoal) }"
               type="button"
               :aria-pressed="isGoalPanelOpen"
               :title="threadGoal?.objective || 'Goal'"
               :disabled="isGoalTriggerDisabled"
-              @click="toggleGoalPanel"
+              @click="onGoalTriggerClick"
             >
               <span>Goal</span>
               <span
@@ -218,7 +218,6 @@
 
               <div v-if="threadGoal" class="thread-composer-goal-meta">
                 <span>{{ goalUsageText }}</span>
-                <span v-if="goalBudgetText">{{ goalBudgetText }}</span>
                 <span>{{ goalTimeText }}</span>
               </div>
 
@@ -246,10 +245,10 @@
                 <button
                   class="thread-composer-goal-button"
                   type="button"
-                  :disabled="isGoalActionDisabled"
-                  @click="openGoalEditor"
+                  :disabled="isGoalTriggerDisabled"
+                  @click="insertGoalCommand(threadGoal.objective)"
                 >
-                  Edit
+                  Change
                 </button>
                 <button
                   class="thread-composer-goal-button"
@@ -259,34 +258,6 @@
                 >
                   Clear
                 </button>
-              </div>
-
-              <div v-if="isGoalEditorVisible" class="thread-composer-goal-editor">
-                <textarea
-                  v-model="goalObjectiveDraft"
-                  class="thread-composer-goal-input"
-                  placeholder="Objective"
-                  :disabled="isGoalActionDisabled"
-                />
-                <div class="thread-composer-goal-editor-row">
-                  <input
-                    v-model="goalTokenBudgetDraft"
-                    class="thread-composer-goal-budget-input"
-                    type="number"
-                    min="1"
-                    step="1000"
-                    placeholder="Token budget"
-                    :disabled="isGoalActionDisabled"
-                  />
-                  <button
-                    class="thread-composer-goal-button thread-composer-goal-button-primary"
-                    type="button"
-                    :disabled="isGoalActionDisabled || goalObjectiveDraft.trim().length === 0"
-                    @click="submitGoalDraft"
-                  >
-                    Set Goal
-                  </button>
-                </div>
               </div>
             </section>
           </div>
@@ -544,9 +515,6 @@ const selectedImages = ref<SelectedImage[]>([])
 const fileAttachments = ref<FileAttachment[]>([])
 const folderUploadGroups = ref<FolderUploadGroup[]>([])
 const isGoalPanelOpen = ref(false)
-const isGoalEditorOpen = ref(false)
-const goalObjectiveDraft = ref('')
-const goalTokenBudgetDraft = ref<string | number>('')
 const localGoalError = ref('')
 
 const dictationFeedback = ref('')
@@ -621,16 +589,8 @@ const isGoalTriggerDisabled = computed(() => props.disabled === true || props.ac
 const displayGoalError = computed(() => localGoalError.value.trim() || props.threadGoalError?.trim() || '')
 const threadGoalStatusTone = computed(() => threadGoal.value?.status ?? 'none')
 const threadGoalStatusLabel = computed(() => formatGoalStatus(threadGoal.value?.status ?? null))
-const isGoalEditorVisible = computed(() => isGoalPanelOpen.value && (isGoalEditorOpen.value || !threadGoal.value))
+const isGoalComposerActive = computed(() => /^\/goal(?:\s|$)/iu.test(draft.value.trimStart()))
 const goalUsageText = computed(() => `${formatCompactTokenCount(threadGoal.value?.tokensUsed ?? 0)} tokens`)
-const goalBudgetText = computed(() => {
-  const goal = threadGoal.value
-  if (!goal || typeof goal.tokenBudget !== 'number' || goal.tokenBudget <= 0) return ''
-  const usedPercent = goal.tokenBudget > 0
-    ? Math.min(100, Math.round((goal.tokensUsed / goal.tokenBudget) * 100))
-    : 0
-  return `${usedPercent}% of ${formatCompactTokenCount(goal.tokenBudget)} budget`
-})
 const goalTimeText = computed(() => formatGoalDuration(threadGoal.value?.timeUsedSeconds ?? 0))
 
 const isPlanModeWaitingForModel = computed(() =>
@@ -947,59 +907,52 @@ function parseGoalCommand(text: string): UiThreadGoalCommand | null {
   }
 }
 
-function readGoalBudgetDraft(): number | null {
-  const raw = String(goalTokenBudgetDraft.value ?? '').trim()
-  if (!raw) return null
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null
-}
-
-function syncGoalDraftFromCurrent(): void {
-  goalObjectiveDraft.value = threadGoal.value?.objective ?? ''
-  goalTokenBudgetDraft.value = typeof threadGoal.value?.tokenBudget === 'number'
-    ? String(threadGoal.value.tokenBudget)
-    : ''
-}
-
-function openGoalPanel(options: { edit?: boolean } = {}): void {
-  syncGoalDraftFromCurrent()
+function openGoalPanel(): void {
   localGoalError.value = ''
   isGoalPanelOpen.value = true
-  isGoalEditorOpen.value = options.edit === true || !threadGoal.value
 }
 
 function closeGoalPanel(): void {
   isGoalPanelOpen.value = false
-  isGoalEditorOpen.value = false
   localGoalError.value = ''
 }
 
-function openGoalEditor(): void {
-  syncGoalDraftFromCurrent()
-  localGoalError.value = ''
-  isGoalEditorOpen.value = true
-}
-
-function toggleGoalPanel(): void {
-  if (isGoalTriggerDisabled.value) return
-  if (isGoalPanelOpen.value) {
-    closeGoalPanel()
-  } else {
-    openGoalPanel()
-    emit('goalCommand', { action: 'show' })
-  }
-}
-
-function submitGoalDraft(): void {
-  const objective = goalObjectiveDraft.value.trim()
-  if (!objective) return
-  localGoalError.value = ''
-  emit('goalCommand', {
-    action: 'set',
-    objective,
-    tokenBudget: readGoalBudgetDraft(),
+function focusGoalCommandAtEnd(): void {
+  nextTick(() => {
+    const input = inputRef.value
+    if (!input) return
+    input.focus()
+    const end = input.value.length
+    input.setSelectionRange(end, end)
   })
-  isGoalEditorOpen.value = false
+}
+
+function insertGoalCommand(objective = ''): void {
+  if (isGoalTriggerDisabled.value) return
+  const normalizedObjective = objective.trim()
+  const currentDraft = draft.value.trim()
+  const nextObjective = normalizedObjective || (
+    currentDraft && !/^\/goal(?:\s|$)/iu.test(currentDraft) ? currentDraft : ''
+  )
+  draft.value = nextObjective ? `/goal ${nextObjective}` : '/goal '
+  closeGoalPanel()
+  localGoalError.value = ''
+  focusGoalCommandAtEnd()
+}
+
+function onGoalTriggerClick(): void {
+  if (isGoalTriggerDisabled.value) return
+  if (threadGoal.value || displayGoalError.value) {
+    if (isGoalPanelOpen.value) {
+      closeGoalPanel()
+      return
+    }
+    localGoalError.value = ''
+    isGoalPanelOpen.value = true
+    emit('goalCommand', { action: 'show' })
+    return
+  }
+  insertGoalCommand()
 }
 
 function emitGoalStatus(status: UiThreadGoalStatus): void {
@@ -1018,7 +971,7 @@ function onSubmit(mode: 'steer' | 'queue' = 'steer'): void {
   const goalCommand = parseGoalCommand(text)
   if (goalCommand) {
     if (goalCommand.action !== 'set' && !isRealThreadContext.value) {
-      openGoalPanel({ edit: false })
+      openGoalPanel()
       localGoalError.value = 'Open a thread before using this goal command.'
     } else {
       localGoalError.value = ''
@@ -1506,8 +1459,6 @@ watch(
     dictationFeedback.value = ''
     localGoalError.value = ''
     isGoalPanelOpen.value = false
-    isGoalEditorOpen.value = false
-    syncGoalDraftFromCurrent()
     isAttachMenuOpen.value = false
     closeFileMention()
   },
@@ -1516,12 +1467,7 @@ watch(
 watch(
   () => props.threadGoal,
   () => {
-    if (threadGoal.value && isGoalPanelOpen.value) {
-      isGoalEditorOpen.value = false
-    }
-    if (!isGoalPanelOpen.value) {
-      syncGoalDraftFromCurrent()
-    }
+    if (!threadGoal.value && isGoalPanelOpen.value && !displayGoalError.value) closeGoalPanel()
   },
 )
 
@@ -1614,22 +1560,6 @@ watch(
 
 .thread-composer-goal-button-primary {
   @apply border-zinc-900 bg-zinc-900 text-white hover:border-black hover:bg-black;
-}
-
-.thread-composer-goal-editor {
-  @apply mt-2 flex flex-col gap-2;
-}
-
-.thread-composer-goal-input {
-  @apply min-h-17 w-full resize-y rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-sm leading-5 text-zinc-900 outline-none transition focus:border-zinc-400 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500;
-}
-
-.thread-composer-goal-editor-row {
-  @apply flex min-w-0 flex-wrap items-center gap-2;
-}
-
-.thread-composer-goal-budget-input {
-  @apply h-7 min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-800 outline-none transition focus:border-zinc-400 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500;
 }
 
 .thread-composer-shell {
