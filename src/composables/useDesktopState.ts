@@ -74,10 +74,16 @@ const PROJECT_ORDER_STORAGE_KEY = 'codex-web-local.project-order.v1'
 const PROJECT_DISPLAY_NAME_STORAGE_KEY = 'codex-web-local.project-display-name.v1'
 const COLLABORATION_MODE_STORAGE_KEY = 'codex-web-local.collaboration-mode-by-context.v1'
 const LEGACY_COLLABORATION_MODE_STORAGE_KEY = 'codex-web-local.collaboration-mode.v1'
+const MODEL_PREFERENCE_STORAGE_KEY = 'codex-web-local.model-preference-by-context.v1'
 const NEW_THREAD_COLLABORATION_MODE_CONTEXT = '__new-thread__'
 const EVENT_SYNC_DEBOUNCE_MS = 220
 const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const GLOBAL_SERVER_REQUEST_SCOPE = '__global__'
+
+type ModelPreferenceState = {
+  modelId: string
+  reasoningEffort: ReasoningEffort | ''
+}
 
 function loadReadStateMap(): Record<string, string> {
   if (typeof window === 'undefined') return {}
@@ -153,6 +159,63 @@ function saveSelectedCollaborationModeMap(state: Record<string, CollaborationMod
     window.localStorage.setItem(COLLABORATION_MODE_STORAGE_KEY, JSON.stringify(state))
   }
   window.localStorage.removeItem(LEGACY_COLLABORATION_MODE_STORAGE_KEY)
+}
+
+function normalizeReasoningEffortPreference(value: unknown): ReasoningEffort | '' {
+  return typeof value === 'string' && REASONING_EFFORT_OPTIONS.includes(value as ReasoningEffort)
+    ? value as ReasoningEffort
+    : ''
+}
+
+function normalizeModelPreference(value: unknown): ModelPreferenceState | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const modelId = typeof record.modelId === 'string'
+    ? record.modelId.trim()
+    : typeof record.model === 'string'
+      ? record.model.trim()
+      : ''
+  const reasoningEffort = normalizeReasoningEffortPreference(record.reasoningEffort)
+  if (!modelId && !reasoningEffort) return null
+  return { modelId, reasoningEffort }
+}
+
+function toModelPreferenceContextId(threadId: string): string {
+  const normalizedThreadId = threadId.trim()
+  return normalizedThreadId || NEW_THREAD_COLLABORATION_MODE_CONTEXT
+}
+
+function loadSelectedModelPreferenceMap(): Record<string, ModelPreferenceState> {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const raw = window.localStorage.getItem(MODEL_PREFERENCE_STORAGE_KEY)
+    if (!raw) return {}
+
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+
+    const next: Record<string, ModelPreferenceState> = {}
+    for (const [contextId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof contextId !== 'string' || contextId.length === 0) continue
+      const normalized = normalizeModelPreference(value)
+      if (normalized) {
+        next[contextId] = normalized
+      }
+    }
+    return next
+  } catch {
+    return {}
+  }
+}
+
+function saveSelectedModelPreferenceMap(state: Record<string, ModelPreferenceState>): void {
+  if (typeof window === 'undefined') return
+  if (Object.keys(state).length === 0) {
+    window.localStorage.removeItem(MODEL_PREFERENCE_STORAGE_KEY)
+    return
+  }
+  window.localStorage.setItem(MODEL_PREFERENCE_STORAGE_KEY, JSON.stringify(state))
 }
 
 function clamp(value: number, minValue: number, maxValue: number): number {
@@ -821,6 +884,12 @@ export function useDesktopState() {
   const selectedCollaborationMode = ref<CollaborationModeKind>(
     readSelectedCollaborationMode(selectedCollaborationModeByContext.value, selectedThreadId.value),
   )
+  const selectedModelPreferenceByContext = ref<Record<string, ModelPreferenceState>>(
+    loadSelectedModelPreferenceMap(),
+  )
+  const selectedModelPreferenceContextId = ref(toModelPreferenceContextId(selectedThreadId.value))
+  const defaultModelId = ref('')
+  const defaultReasoningEffort = ref<ReasoningEffort | ''>('medium')
   const selectedModelId = ref('')
   const selectedReasoningEffort = ref<ReasoningEffort | ''>('medium')
   const readStateByThreadId = ref<Record<string, string>>(loadReadStateMap())
@@ -943,17 +1012,73 @@ export function useDesktopState() {
       selectedCollaborationModeByContext.value,
       nextThreadId,
     )
+    setSelectedModelPreferenceContext(nextThreadId)
     activeReasoningItemId = ''
     shouldAutoScrollOnNextAgentEvent = false
   }
 
-  function setSelectedModelId(modelId: string): void {
+  function resolveModelIdForPreference(modelId: string): string {
+    const normalizedModelId = modelId.trim()
+    const modelIds = availableModels.value.map((model) => model.id)
+    if (normalizedModelId && modelIds.includes(normalizedModelId)) return normalizedModelId
+    if (defaultModelId.value && modelIds.includes(defaultModelId.value)) return defaultModelId.value
+    return resolveFallbackModelId(availableModels.value)
+  }
+
+  function applySelectedModelPreference(contextId = selectedModelPreferenceContextId.value): void {
+    const normalizedContextId = toModelPreferenceContextId(contextId)
+    const preference = selectedModelPreferenceByContext.value[normalizedContextId]
+    const nextModelId = resolveModelIdForPreference(preference?.modelId ?? '')
+    selectedModelId.value = nextModelId
+    selectedReasoningEffort.value = resolveReasoningEffortForModel(
+      availableModels.value,
+      nextModelId,
+      preference?.reasoningEffort || defaultReasoningEffort.value,
+    )
+  }
+
+  function saveModelPreferenceForContext(
+    contextId: string,
+    modelId: string,
+    reasoningEffort: ReasoningEffort | '',
+  ): void {
+    const normalizedContextId = toModelPreferenceContextId(contextId)
+    const normalizedModelId = modelId.trim()
+    const normalizedReasoningEffort = normalizeReasoningEffortPreference(reasoningEffort)
+    if (!normalizedModelId && !normalizedReasoningEffort) {
+      if (selectedModelPreferenceByContext.value[normalizedContextId]) {
+        selectedModelPreferenceByContext.value = omitKey(selectedModelPreferenceByContext.value, normalizedContextId)
+        saveSelectedModelPreferenceMap(selectedModelPreferenceByContext.value)
+      }
+      return
+    }
+
+    const previous = selectedModelPreferenceByContext.value[normalizedContextId]
+    if (previous?.modelId === normalizedModelId && previous.reasoningEffort === normalizedReasoningEffort) return
+    selectedModelPreferenceByContext.value = {
+      ...selectedModelPreferenceByContext.value,
+      [normalizedContextId]: {
+        modelId: normalizedModelId,
+        reasoningEffort: normalizedReasoningEffort,
+      },
+    }
+    saveSelectedModelPreferenceMap(selectedModelPreferenceByContext.value)
+  }
+
+  function setSelectedModelPreferenceContext(contextId: string): void {
+    const normalizedContextId = toModelPreferenceContextId(contextId)
+    selectedModelPreferenceContextId.value = normalizedContextId
+    applySelectedModelPreference(normalizedContextId)
+  }
+
+  function setSelectedModelId(modelId: string, contextId = selectedModelPreferenceContextId.value): void {
     selectedModelId.value = modelId.trim()
     selectedReasoningEffort.value = resolveReasoningEffortForModel(
       availableModels.value,
       selectedModelId.value,
       selectedReasoningEffort.value,
     )
+    saveModelPreferenceForContext(contextId, selectedModelId.value, selectedReasoningEffort.value)
   }
 
   function setSelectedCollaborationMode(mode: CollaborationModeKind): void {
@@ -1123,6 +1248,11 @@ export function useDesktopState() {
       fallbackModelId,
       selectedReasoningEffort.value,
     )
+    saveModelPreferenceForContext(
+      selectedModelPreferenceContextId.value,
+      selectedModelId.value,
+      selectedReasoningEffort.value,
+    )
 
     try {
       await writeDefaultModelConfig(fallbackModelId)
@@ -1218,11 +1348,15 @@ export function useDesktopState() {
     }
   }
 
-  function setSelectedReasoningEffort(effort: ReasoningEffort | ''): void {
+  function setSelectedReasoningEffort(
+    effort: ReasoningEffort | '',
+    contextId = selectedModelPreferenceContextId.value,
+  ): void {
     if (effort && !REASONING_EFFORT_OPTIONS.includes(effort)) {
       return
     }
     selectedReasoningEffort.value = effort
+    saveModelPreferenceForContext(contextId, selectedModelId.value, selectedReasoningEffort.value)
   }
 
   async function refreshCollaborationModes(): Promise<void> {
@@ -1258,24 +1392,22 @@ export function useDesktopState() {
       availableModels.value = models
       const modelIds = models.map((model) => model.id)
 
-      const hasSelectedModel = selectedModelId.value.length > 0 && modelIds.includes(selectedModelId.value)
-      if (!hasSelectedModel) {
-        if (currentConfig.model && modelIds.includes(currentConfig.model)) {
-          selectedModelId.value = currentConfig.model
-        } else if (modelIds.length > 0) {
-          selectedModelId.value = resolveFallbackModelId(models)
-        } else {
-          selectedModelId.value = ''
-        }
+      if (currentConfig.model && modelIds.includes(currentConfig.model)) {
+        defaultModelId.value = currentConfig.model
+      } else if (modelIds.length > 0) {
+        defaultModelId.value = resolveFallbackModelId(models)
+      } else {
+        defaultModelId.value = ''
       }
 
-      selectedReasoningEffort.value = resolveReasoningEffortForModel(
+      defaultReasoningEffort.value = resolveReasoningEffortForModel(
         models,
-        selectedModelId.value,
+        defaultModelId.value,
         currentConfig.reasoningEffort && REASONING_EFFORT_OPTIONS.includes(currentConfig.reasoningEffort)
           ? currentConfig.reasoningEffort
-          : selectedReasoningEffort.value,
+          : defaultReasoningEffort.value,
       )
+      applySelectedModelPreference()
     } catch {
       // Keep chat UI usable even if model metadata is temporarily unavailable.
     }
@@ -1365,6 +1497,19 @@ export function useDesktopState() {
     if (nextScrollState !== scrollStateByThreadId.value) {
       scrollStateByThreadId.value = nextScrollState
       saveThreadScrollStateMap(nextScrollState)
+    }
+    const nextModelPreferences: Record<string, ModelPreferenceState> = {}
+    let modelPreferencesChanged = false
+    for (const [contextId, state] of Object.entries(selectedModelPreferenceByContext.value)) {
+      if (contextId === NEW_THREAD_COLLABORATION_MODE_CONTEXT || activeThreadIds.has(contextId)) {
+        nextModelPreferences[contextId] = state
+      } else {
+        modelPreferencesChanged = true
+      }
+    }
+    if (modelPreferencesChanged) {
+      selectedModelPreferenceByContext.value = nextModelPreferences
+      saveSelectedModelPreferenceMap(nextModelPreferences)
     }
     loadedMessagesByThreadId.value = pruneThreadStateMap(loadedMessagesByThreadId.value, activeThreadIds)
     loadedVersionByThreadId.value = pruneThreadStateMap(loadedVersionByThreadId.value, activeThreadIds)
@@ -3242,6 +3387,7 @@ export function useDesktopState() {
     const nextText = text.trim()
     const targetCwd = cwd.trim()
     const selectedModel = selectedModelId.value.trim()
+    const selectedEffort = selectedReasoningEffort.value
     if (!nextText && imageUrls.length === 0 && fileAttachments.length === 0) return ''
 
     isSendingMessage.value = true
@@ -3267,6 +3413,7 @@ export function useDesktopState() {
       if (!threadId) return ''
 
       insertOptimisticThread(threadId, targetCwd, nextText || '[Image]')
+      saveModelPreferenceForContext(threadId, selectedModelId.value || selectedModel, selectedEffort)
       resumedThreadById.value = {
         ...resumedThreadById.value,
         [threadId]: true,
@@ -3328,6 +3475,7 @@ export function useDesktopState() {
     const normalizedObjective = objective.trim()
     const targetCwd = cwd.trim()
     const selectedModel = selectedModelId.value.trim()
+    const selectedEffort = selectedReasoningEffort.value
     if (!normalizedObjective) return ''
 
     isSendingMessage.value = true
@@ -3353,6 +3501,7 @@ export function useDesktopState() {
       if (!threadId) return ''
 
       insertOptimisticThread(threadId, targetCwd, normalizedObjective)
+      saveModelPreferenceForContext(threadId, selectedModelId.value || selectedModel, selectedEffort)
       resumedThreadById.value = {
         ...resumedThreadById.value,
         [threadId]: true,
@@ -3961,6 +4110,7 @@ export function useDesktopState() {
     removeQueuedMessage,
     steerQueuedMessage,
     setSelectedCollaborationMode,
+    setSelectedModelPreferenceContext,
     setSelectedModelId,
     setSelectedReasoningEffort,
     respondToPendingServerRequest,

@@ -443,6 +443,7 @@ const {
   removeQueuedMessage,
   steerQueuedMessage,
   setSelectedCollaborationMode,
+  setSelectedModelPreferenceContext,
   setSelectedModelId,
   setSelectedReasoningEffort,
   respondToPendingServerRequest,
@@ -557,6 +558,9 @@ const composerCwd = computed(() => {
   return selectedThread.value?.cwd?.trim() ?? ''
 })
 const isSelectedThreadInProgress = computed(() => !isHomeRoute.value && selectedThread.value?.inProgress === true)
+const composerModelPreferenceContextId = computed(() =>
+  isHomeRoute.value ? '__new-thread__' : routeThreadId.value || selectedThreadId.value,
+)
 const isAccountSwitchBlocked = computed(() =>
   isSendingMessage.value ||
   isInterruptingTurn.value ||
@@ -1456,11 +1460,11 @@ function getPathLeafName(path: string): string {
 }
 
 function onSelectModel(modelId: string): void {
-  setSelectedModelId(modelId)
+  setSelectedModelId(modelId, composerModelPreferenceContextId.value)
 }
 
 function onSelectReasoningEffort(effort: ReasoningEffort | ''): void {
-  setSelectedReasoningEffort(effort)
+  setSelectedReasoningEffort(effort, composerModelPreferenceContextId.value)
 }
 
 function onInterruptTurn(): void {
@@ -1799,6 +1803,14 @@ watch(
     if (route.name === 'thread' && routeThreadId.value === threadId) return
     await router.replace({ name: 'thread', params: { threadId } })
   },
+)
+
+watch(
+  () => composerModelPreferenceContextId.value,
+  (contextId) => {
+    setSelectedModelPreferenceContext(contextId)
+  },
+  { immediate: true },
 )
 
 watch(
