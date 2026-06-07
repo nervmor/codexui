@@ -49,21 +49,24 @@
         "null"
       ]
     },
-    "serviceName": {
+    "dynamicTools": {
       "type": [
-        "string",
+        "array",
         "null"
-      ]
+      ],
+      "items": {
+        "$ref": "#/definitions/DynamicToolSpec"
+      }
     },
-    "sandbox": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/SandboxMode"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "environments": {
+      "description": "Optional sticky environments for this thread.\n\nOmitted selects the default environment when environment access is enabled. Empty disables environment access for turns that do not provide a turn override. Non-empty selects the first environment as the current turn environment.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/TurnEnvironmentParams"
+      }
     },
     "ephemeral": {
       "type": [
@@ -71,21 +74,15 @@
         "null"
       ]
     },
-    "serviceTier": {
+    "experimentalRawEvents": {
+      "description": "If true, opt into emitting raw Responses API items on the event stream. This is for internal use only (e.g. Codex Cloud).",
+      "type": "boolean"
+    },
+    "mockExperimentalField": {
+      "description": "Test-only experimental field used to validate experimental gating and schema filtering behavior in a stable way.",
       "type": [
         "string",
         "null"
-      ]
-    },
-    "threadSource": {
-      "description": "Optional client-supplied analytics source classification for this thread.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ThreadSource"
-        },
-        {
-          "type": "null"
-        }
       ]
     },
     "model": {
@@ -95,6 +92,13 @@
       ]
     },
     "modelProvider": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "permissions": {
+      "description": "Named profile id for this thread. Cannot be combined with `sandbox`.",
       "type": [
         "string",
         "null"
@@ -110,10 +114,53 @@
         }
       ]
     },
+    "runtimeWorkspaceRoots": {
+      "description": "Replace the thread's runtime workspace roots. Relative paths are resolved against the effective cwd for the thread.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "sandbox": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SandboxMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "serviceName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "serviceTier": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "sessionStartSource": {
       "anyOf": [
         {
           "$ref": "#/definitions/ThreadStartSource"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "threadSource": {
+      "description": "Optional client-supplied analytics source classification for this thread.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ThreadSource"
         },
         {
           "type": "null"

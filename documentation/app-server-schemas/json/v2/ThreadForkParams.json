@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ThreadForkParams",
-  "description": "There are two ways to fork a thread: 1. By thread_id: load the thread from disk by thread_id and fork it into a new thread. 2. By path: load the thread from disk by path and fork it into a new thread.\n\nIf using path, the thread_id param will be ignored.\n\nPrefer using thread_id whenever possible.",
+  "description": "There are two ways to fork a thread: 1. By thread_id: load the thread from disk by thread_id and fork it into a new thread. 2. By path: load the thread from disk by path and fork it into a new thread.\n\nIf using a non-empty path, the thread_id param will be ignored. Empty string path values are treated as absent.\n\nPrefer using thread_id whenever possible.",
   "type": "object",
   "required": [
     "threadId"
@@ -56,16 +56,9 @@
     "ephemeral": {
       "type": "boolean"
     },
-    "threadSource": {
-      "description": "Optional client-supplied analytics source classification for this forked thread.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ThreadSource"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "excludeTurns": {
+      "description": "When true, return only thread metadata and live fork state without populating `thread.turns`. This is useful when the client plans to call `thread/turns/list` immediately after forking.",
+      "type": "boolean"
     },
     "model": {
       "description": "Configuration overrides for the forked thread, if any.",
@@ -80,6 +73,31 @@
         "null"
       ]
     },
+    "path": {
+      "description": "[UNSTABLE] Specify the rollout path to fork from. If specified, the thread_id param will be ignored.",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "permissions": {
+      "description": "Named profile id for the forked thread. Cannot be combined with `sandbox`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runtimeWorkspaceRoots": {
+      "description": "Replace the thread's runtime workspace roots. Relative paths are resolved against the effective cwd for the thread.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "sandbox": {
       "anyOf": [
         {
@@ -90,13 +108,24 @@
         }
       ]
     },
-    "threadId": {
-      "type": "string"
-    },
     "serviceTier": {
       "type": [
         "string",
         "null"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "threadSource": {
+      "description": "Optional client-supplied analytics source classification for this forked thread.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ThreadSource"
+        },
+        {
+          "type": "null"
+        }
       ]
     }
   },

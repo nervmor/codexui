@@ -75,9 +75,26 @@
         }
       ]
     },
+    "ComputerUseRequirements": {
+      "type": "object",
+      "properties": {
+        "allowLockedComputerUse": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
     "ConfigRequirements": {
       "type": "object",
       "properties": {
+        "allowAppshots": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "allowManagedHooksOnly": {
           "type": [
             "boolean",
@@ -93,13 +110,22 @@
             "$ref": "#/definitions/AskForApproval"
           }
         },
-        "featureRequirements": {
+        "allowedApprovalsReviewers": {
           "type": [
-            "object",
+            "array",
             "null"
           ],
-          "additionalProperties": {
-            "type": "boolean"
+          "items": {
+            "$ref": "#/definitions/ApprovalsReviewer"
+          }
+        },
+        "allowedPermissions": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
           }
         },
         "allowedSandboxModes": {
@@ -120,10 +146,58 @@
             "$ref": "#/definitions/WebSearchMode"
           }
         },
+        "allowedWindowsSandboxImplementations": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/WindowsSandboxSetupMode"
+          }
+        },
+        "computerUse": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ComputerUseRequirements"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "enforceResidency": {
           "anyOf": [
             {
               "$ref": "#/definitions/ResidencyRequirement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "featureRequirements": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "hooks": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ManagedHooksRequirements"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "network": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NetworkRequirements"
             },
             {
               "type": "null"
@@ -242,6 +316,8 @@
         "PreToolUse",
         "SessionStart",
         "Stop",
+        "SubagentStart",
+        "SubagentStop",
         "UserPromptSubmit"
       ],
       "properties": {
@@ -282,6 +358,18 @@
           }
         },
         "Stop": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
+          }
+        },
+        "SubagentStart": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
+          }
+        },
+        "SubagentStop": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/ConfiguredHookMatcherGroup"
@@ -426,7 +514,7 @@
       "type": "string",
       "enum": [
         "allow",
-        "none"
+        "deny"
       ]
     },
     "ResidencyRequirement": {
@@ -449,6 +537,13 @@
         "disabled",
         "cached",
         "live"
+      ]
+    },
+    "WindowsSandboxSetupMode": {
+      "type": "string",
+      "enum": [
+        "elevated",
+        "unelevated"
       ]
     }
   }

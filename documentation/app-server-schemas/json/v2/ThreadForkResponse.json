@@ -12,10 +12,16 @@
     "thread"
   ],
   "properties": {
-    "serviceTier": {
-      "type": [
-        "string",
-        "null"
+    "activePermissionProfile": {
+      "description": "Named or implicit built-in profile that produced the active permissions, when known.",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ActivePermissionProfile"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "approvalPolicy": {
@@ -56,8 +62,13 @@
         }
       ]
     },
-    "thread": {
-      "$ref": "#/definitions/Thread"
+    "runtimeWorkspaceRoots": {
+      "description": "Thread-scoped runtime workspace roots used to materialize `:workspace_roots`.",
+      "default": [],
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/AbsolutePathBuf"
+      }
     },
     "sandbox": {
       "description": "Legacy sandbox policy retained for compatibility. Experimental clients should prefer `activePermissionProfile` for profile provenance.",
@@ -66,6 +77,15 @@
           "$ref": "#/definitions/SandboxPolicy"
         }
       ]
+    },
+    "serviceTier": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "thread": {
+      "$ref": "#/definitions/Thread"
     }
   },
   "definitions": {
@@ -80,7 +100,7 @@
       ],
       "properties": {
         "extends": {
-          "description": "Parent profile identifier once permissions profiles support inheritance. This is currently always `null`.",
+          "description": "Parent profile identifier from the selected permissions profile's `extends` setting, when present.",
           "default": null,
           "type": [
             "string",
@@ -598,6 +618,8 @@
     "ImageDetail": {
       "type": "string",
       "enum": [
+        "auto",
+        "low",
         "high",
         "original"
       ]
@@ -1117,6 +1139,13 @@
             "null"
           ]
         },
+        "parentThreadId": {
+          "description": "The ID of the parent thread. This will only be set if this thread is a subagent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "path": {
           "description": "[UNSTABLE] Path to the thread on disk.",
           "type": [
@@ -1193,6 +1222,12 @@
             "type"
           ],
           "properties": {
+            "clientId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "content": {
               "type": "array",
               "items": {
@@ -1493,6 +1528,12 @@
               "type": "string"
             },
             "mcpAppResourceUri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pluginId": {
               "type": [
                 "string",
                 "null"

@@ -7,6 +7,16 @@
     "threadId"
   ],
   "properties": {
+    "additionalContext": {
+      "description": "Optional client-provided context fragments keyed by an opaque source identifier.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/definitions/AdditionalContextEntry"
+      }
+    },
     "approvalPolicy": {
       "description": "Override the approval policy for this turn and subsequent turns.",
       "anyOf": [
@@ -29,11 +39,17 @@
         }
       ]
     },
-    "sandboxPolicy": {
-      "description": "Override the sandbox policy for this turn and subsequent turns.",
+    "clientUserMessageId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "collaborationMode": {
+      "description": "EXPERIMENTAL - Set a pre-set collaboration mode. Takes precedence over model, reasoning_effort, and developer instructions if set.\n\nFor `collaboration_mode.settings.developer_instructions`, `null` means \"use the built-in instructions for the selected mode\".",
       "anyOf": [
         {
-          "$ref": "#/definitions/SandboxPolicy"
+          "$ref": "#/definitions/CollaborationMode"
         },
         {
           "type": "null"
@@ -58,12 +74,15 @@
         }
       ]
     },
-    "serviceTier": {
-      "description": "Override the service tier for this turn and subsequent turns.",
+    "environments": {
+      "description": "Optional turn-scoped environments.\n\nOmitted uses the thread sticky environments. Empty disables environment access for this turn. Non-empty selects the first environment as the current turn environment for this turn.",
       "type": [
-        "string",
+        "array",
         "null"
-      ]
+      ],
+      "items": {
+        "$ref": "#/definitions/TurnEnvironmentParams"
+      }
     },
     "input": {
       "type": "array",
@@ -81,15 +100,11 @@
     "outputSchema": {
       "description": "Optional JSON Schema used to constrain the final assistant message for this turn."
     },
-    "summary": {
-      "description": "Override the reasoning summary for this turn and subsequent turns.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ReasoningSummary"
-        },
-        {
-          "type": "null"
-        }
+    "permissions": {
+      "description": "Select a named permissions profile id for this turn and subsequent turns. Cannot be combined with `sandboxPolicy`.",
+      "type": [
+        "string",
+        "null"
       ]
     },
     "personality": {
@@ -97,6 +112,55 @@
       "anyOf": [
         {
           "$ref": "#/definitions/Personality"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "responsesapiClientMetadata": {
+      "description": "Optional turn-scoped Responses API client metadata.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "runtimeWorkspaceRoots": {
+      "description": "Replace the thread's runtime workspace roots for this turn and subsequent turns. Relative paths are resolved against the effective cwd for the turn.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "sandboxPolicy": {
+      "description": "Override the sandbox policy for this turn and subsequent turns.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SandboxPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "serviceTier": {
+      "description": "Override the service tier for this turn and subsequent turns.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "description": "Override the reasoning summary for this turn and subsequent turns.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ReasoningSummary"
         },
         {
           "type": "null"
@@ -111,6 +175,28 @@
     "AbsolutePathBuf": {
       "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
       "type": "string"
+    },
+    "AdditionalContextEntry": {
+      "type": "object",
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/AdditionalContextKind"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "AdditionalContextKind": {
+      "type": "string",
+      "enum": [
+        "untrusted",
+        "application"
+      ]
     },
     "ApprovalsReviewer": {
       "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
@@ -209,6 +295,8 @@
     "ImageDetail": {
       "type": "string",
       "enum": [
+        "auto",
+        "low",
         "high",
         "original"
       ]

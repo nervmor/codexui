@@ -604,8 +604,16 @@
         "turnId"
       ],
       "properties": {
-        "turnId": {
-          "type": "string"
+        "additionalPermissions": {
+          "description": "Optional additional permissions requested for this command.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AdditionalPermissionProfile"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "approvalId": {
           "description": "Unique identifier for this specific approval callback.\n\nFor regular shell/unified_exec approvals, this is null.\n\nFor zsh-exec-bridge subcommand approvals, multiple callbacks can belong to one parent `itemId`, so `approvalId` is a distinct opaque callback id (a UUID) used to disambiguate routing.",
@@ -614,8 +622,15 @@
             "null"
           ]
         },
-        "threadId": {
-          "type": "string"
+        "availableDecisions": {
+          "description": "Ordered list of decisions the client may present for this prompt.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/CommandExecutionApprovalDecision"
+          }
         },
         "command": {
           "description": "The command to be executed.",
@@ -690,6 +705,12 @@
           "description": "Unix timestamp (in milliseconds) when this approval request started.",
           "type": "integer",
           "format": "int64"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
         }
       }
     },
@@ -885,7 +906,7 @@
       "enum": [
         "read",
         "write",
-        "none"
+        "deny"
       ]
     },
     "FileSystemPath": {
@@ -1851,6 +1872,13 @@
       "properties": {
         "cwd": {
           "$ref": "#/definitions/AbsolutePathBuf"
+        },
+        "environmentId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "itemId": {
           "type": "string"
