@@ -241,7 +241,7 @@
                 <p v-if="goalCommandHintText" class="thread-composer-goal-menu-hint">{{ goalCommandHintText }}</p>
               </template>
               <template v-else>
-                <div class="thread-composer-goal-menu-title">Usage: /goal &lt;objective&gt;</div>
+                <div class="thread-composer-goal-menu-title">Usage: /goal [&lt;objective&gt;|clear|edit|pause|resume]</div>
                 <p class="thread-composer-goal-menu-hint">No goal is currently set.</p>
               </template>
               <p v-if="props.threadGoalError" class="thread-composer-goal-menu-error">{{ props.threadGoalError }}</p>
