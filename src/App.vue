@@ -172,6 +172,25 @@
                 <span class="sidebar-settings-label">Require ⌘ + enter to send</span>
                 <span class="sidebar-settings-toggle" :class="{ 'is-on': !sendWithEnter }" />
               </button>
+              <label class="sidebar-settings-select-row">
+                <span class="sidebar-settings-label">Permissions</span>
+                <select
+                  class="sidebar-settings-select"
+                  :value="selectedPermissionProfileId"
+                  :disabled="!selectedThreadId || availablePermissionProfiles.length === 0"
+                  @change="onSelectPermissionProfile"
+                >
+                  <option value="">Default</option>
+                  <option
+                    v-for="profile in availablePermissionProfiles"
+                    :key="profile.id"
+                    :value="profile.id"
+                    :title="profile.description || profile.id"
+                  >
+                    {{ profile.description || profile.id }}
+                  </option>
+                </select>
+              </label>
               <button class="sidebar-settings-row" type="button" @click="cycleInProgressSendMode">
                 <span class="sidebar-settings-label">When busy, send as</span>
                 <span class="sidebar-settings-value">{{ inProgressSendMode === 'steer' ? 'Steer' : 'Queue' }}</span>
@@ -417,9 +436,11 @@ const {
   selectedThreadId,
   availableCollaborationModes,
   availableModels,
+  availablePermissionProfiles,
   selectedCollaborationMode,
   selectedModelId,
   selectedReasoningEffort,
+  selectedPermissionProfileId,
   installedSkills,
   messages,
   isLoadingThreads,
@@ -446,6 +467,7 @@ const {
   setSelectedModelPreferenceContext,
   setSelectedModelId,
   setSelectedReasoningEffort,
+  setSelectedPermissionProfileId,
   respondToPendingServerRequest,
   renameProject,
   removeProject,
@@ -1474,6 +1496,11 @@ function onSelectReasoningEffort(effort: ReasoningEffort | ''): void {
   setSelectedReasoningEffort(effort, composerModelPreferenceContextId.value)
 }
 
+function onSelectPermissionProfile(event: Event): void {
+  const target = event.target as HTMLSelectElement | null
+  setSelectedPermissionProfileId(target?.value ?? '')
+}
+
 function onInterruptTurn(): void {
   void interruptSelectedThreadTurn()
 }
@@ -2043,8 +2070,18 @@ async function submitFirstMessageForNewThread(
   @apply flex items-center justify-between w-full px-3 py-2.5 text-sm text-zinc-700 border-0 bg-transparent transition hover:bg-zinc-50 cursor-pointer;
 }
 
-.sidebar-settings-row + .sidebar-settings-row {
+.sidebar-settings-select-row {
+  @apply flex items-center justify-between gap-3 w-full border-0 border-t border-zinc-100 bg-transparent px-3 py-2.5 text-sm text-zinc-700;
+}
+
+.sidebar-settings-row + .sidebar-settings-row,
+.sidebar-settings-select-row + .sidebar-settings-row,
+.sidebar-settings-row + .sidebar-settings-select-row {
   @apply border-t border-zinc-100;
+}
+
+.sidebar-settings-select {
+  @apply min-w-0 max-w-36 rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700 outline-none transition focus:border-zinc-400 disabled:cursor-default disabled:bg-zinc-100 disabled:text-zinc-400;
 }
 
 .sidebar-settings-account-section {

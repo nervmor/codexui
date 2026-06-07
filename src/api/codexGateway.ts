@@ -10,18 +10,26 @@ import {
 import type {
   ConfigReadResponse,
   ModelListResponse,
+  PermissionProfileListResponse,
+  PermissionProfileSummary,
   ReasoningEffort,
+  ThreadSearchResponse,
   ThreadGoal,
   ThreadGoalStatus,
   ThreadListResponse,
   ThreadReadResponse,
+  ThreadTurnsItemsListResponse,
+  ThreadTurnsListResponse,
   TurnStartResponse,
+  Turn,
 } from './appServerDtos'
 import { normalizeCodexApiError } from './codexErrors'
 import {
   normalizeThreadGroupsV2,
   normalizeThreadMessagesV2,
+  normalizeTurnMessagesV2,
   readThreadInProgressFromResponse,
+  readThreadInProgressFromTurns,
 } from './normalizers/v2'
 import {
   normalizeCodexModels,
@@ -135,6 +143,11 @@ export type CreateWorktreeOptions = {
 export type ThreadSearchResult = {
   threadIds: string[]
   indexedThreadCount: number
+}
+
+export type UiPermissionProfile = {
+  id: string
+  description: string | null
 }
 
 export type AccountsListResult = {
@@ -343,8 +356,7 @@ function normalizeThreadFileChangeFallback(value: unknown): ThreadFileChangeFall
   return normalized
 }
 
-function buildTurnIndexByTurnId(payload: ThreadReadResponse): ThreadTurnIndexById {
-  const turns = Array.isArray(payload.thread.turns) ? payload.thread.turns : []
+function buildTurnIndexByTurnId(turns: Turn[]): ThreadTurnIndexById {
   const lookup: ThreadTurnIndexById = {}
 
   for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
@@ -436,6 +448,69 @@ async function enrichThreadMessagesWithFallback(threadId: string, messages: UiMe
   }
 }
 
+function normalizePermissionProfile(value: PermissionProfileSummary): UiPermissionProfile | null {
+  const id = typeof value.id === 'string' ? value.id.trim() : ''
+  if (!id) return null
+  return {
+    id,
+    description: typeof value.description === 'string' && value.description.trim().length > 0
+      ? value.description.trim()
+      : null,
+  }
+}
+
+async function listThreadTurnItems(threadId: string, turnId: string): Promise<Turn['items']> {
+  const data: Turn['items'] = []
+  let cursor: string | null = null
+  let pageCount = 0
+
+  do {
+    const payload: ThreadTurnsItemsListResponse = await callRpc<ThreadTurnsItemsListResponse>('thread/turns/items/list', {
+      threadId,
+      turnId,
+      cursor,
+      limit: 200,
+      sortDirection: 'asc',
+    })
+    data.push(...(Array.isArray(payload.data) ? payload.data : []))
+    cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
+    pageCount += 1
+  } while (cursor && pageCount < 100)
+
+  return data
+}
+
+async function listThreadTurns(threadId: string): Promise<Turn[]> {
+  const turns: Turn[] = []
+  let cursor: string | null = null
+  let pageCount = 0
+
+  do {
+    const payload: ThreadTurnsListResponse = await callRpc<ThreadTurnsListResponse>('thread/turns/list', {
+      threadId,
+      cursor,
+      limit: 100,
+      sortDirection: 'asc',
+      itemsView: 'full',
+    })
+    turns.push(...(Array.isArray(payload.data) ? payload.data : []))
+    cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
+    pageCount += 1
+  } while (cursor && pageCount < 100)
+
+  const hydratedTurns = await Promise.all(turns.map(async (turn) => {
+    if (turn.itemsView === 'full') return turn
+    try {
+      const items = await listThreadTurnItems(threadId, turn.id)
+      return { ...turn, items, itemsView: 'full' as const }
+    } catch {
+      return turn
+    }
+  }))
+
+  return hydratedTurns
+}
+
 function normalizeReasoningEffort(value: unknown): ReasoningEffort | '' {
   const allowed: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
   return typeof value === 'string' && allowed.includes(value as ReasoningEffort)
@@ -497,11 +572,16 @@ async function getThreadGroupsV2(): Promise<UiProjectGroup[]> {
 }
 
 async function getThreadMessagesV2(threadId: string): Promise<UiMessage[]> {
-  const payload = await callRpc<ThreadReadResponse>('thread/read', {
-    threadId,
-    includeTurns: true,
-  })
-  return await enrichThreadMessagesWithFallback(threadId, normalizeThreadMessagesV2(payload))
+  try {
+    const turns = await listThreadTurns(threadId)
+    return await enrichThreadMessagesWithFallback(threadId, normalizeTurnMessagesV2(turns))
+  } catch {
+    const payload = await callRpc<ThreadReadResponse>('thread/read', {
+      threadId,
+      includeTurns: true,
+    })
+    return await enrichThreadMessagesWithFallback(threadId, normalizeThreadMessagesV2(payload))
+  }
 }
 
 async function getThreadDetailV2(threadId: string): Promise<{
@@ -509,15 +589,26 @@ async function getThreadDetailV2(threadId: string): Promise<{
   inProgress: boolean
   turnIndexByTurnId: ThreadTurnIndexById
 }> {
-  const payload = await callRpc<ThreadReadResponse>('thread/read', {
-    threadId,
-    includeTurns: true,
-  })
-  const messages = await enrichThreadMessagesWithFallback(threadId, normalizeThreadMessagesV2(payload))
-  return {
-    messages,
-    inProgress: readThreadInProgressFromResponse(payload),
-    turnIndexByTurnId: buildTurnIndexByTurnId(payload),
+  try {
+    const turns = await listThreadTurns(threadId)
+    const messages = await enrichThreadMessagesWithFallback(threadId, normalizeTurnMessagesV2(turns))
+    return {
+      messages,
+      inProgress: readThreadInProgressFromTurns(turns),
+      turnIndexByTurnId: buildTurnIndexByTurnId(turns),
+    }
+  } catch {
+    const payload = await callRpc<ThreadReadResponse>('thread/read', {
+      threadId,
+      includeTurns: true,
+    })
+    const turns = Array.isArray(payload.thread.turns) ? payload.thread.turns : []
+    const messages = await enrichThreadMessagesWithFallback(threadId, normalizeThreadMessagesV2(payload))
+    return {
+      messages,
+      inProgress: readThreadInProgressFromResponse(payload),
+      turnIndexByTurnId: buildTurnIndexByTurnId(turns),
+    }
   }
 }
 
@@ -733,8 +824,7 @@ function parseReviewText(reviewText: string): UiReviewResult {
   }
 }
 
-function readLatestReviewItem(payload: ThreadReadResponse, type: 'enteredReviewMode' | 'exitedReviewMode'): string | null {
-  const turns = Array.isArray(payload.thread.turns) ? payload.thread.turns : []
+function readLatestReviewItem(turns: Turn[], type: 'enteredReviewMode' | 'exitedReviewMode'): string | null {
   for (let turnIndex = turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
     const turn = turns[turnIndex]
     const items = Array.isArray(turn?.items) ? turn.items : []
@@ -752,15 +842,24 @@ export async function getThreadReviewResult(threadId: string): Promise<{
   enteredReviewLabel: string | null
   result: UiReviewResult | null
 }> {
-  const payload = await callRpc<ThreadReadResponse>('thread/read', {
-    threadId,
-    includeTurns: true,
-  })
-
-  const exitedReview = readLatestReviewItem(payload, 'exitedReviewMode')
-  return {
-    enteredReviewLabel: readLatestReviewItem(payload, 'enteredReviewMode'),
-    result: exitedReview ? parseReviewText(exitedReview) : null,
+  try {
+    const turns = await listThreadTurns(threadId)
+    const exitedReview = readLatestReviewItem(turns, 'exitedReviewMode')
+    return {
+      enteredReviewLabel: readLatestReviewItem(turns, 'enteredReviewMode'),
+      result: exitedReview ? parseReviewText(exitedReview) : null,
+    }
+  } catch {
+    const payload = await callRpc<ThreadReadResponse>('thread/read', {
+      threadId,
+      includeTurns: true,
+    })
+    const turns = Array.isArray(payload.thread.turns) ? payload.thread.turns : []
+    const exitedReview = readLatestReviewItem(turns, 'exitedReviewMode')
+    return {
+      enteredReviewLabel: readLatestReviewItem(turns, 'enteredReviewMode'),
+      result: exitedReview ? parseReviewText(exitedReview) : null,
+    }
   }
 }
 
@@ -1246,6 +1345,57 @@ export async function getCurrentModelConfig(): Promise<CurrentModelConfig> {
   return { model, reasoningEffort }
 }
 
+export async function listPermissionProfiles(cwd?: string): Promise<UiPermissionProfile[]> {
+  const profiles: UiPermissionProfile[] = []
+  let cursor: string | null = null
+  let pageCount = 0
+  const normalizedCwd = cwd?.trim() ?? ''
+
+  do {
+    const payload: PermissionProfileListResponse = await callRpc<PermissionProfileListResponse>('permissionProfile/list', {
+      cursor,
+      limit: 100,
+      ...(normalizedCwd ? { cwd: normalizedCwd } : {}),
+    })
+    profiles.push(
+      ...(Array.isArray(payload.data) ? payload.data : [])
+        .map((entry: PermissionProfileSummary) => normalizePermissionProfile(entry))
+        .filter((entry): entry is UiPermissionProfile => entry !== null),
+    )
+    cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
+    pageCount += 1
+  } while (cursor && pageCount < 100)
+
+  return profiles
+}
+
+export async function updateThreadSettings(
+  threadId: string,
+  settings: {
+    model?: string | null
+    effort?: ReasoningEffort | null
+    permissions?: string | null
+  },
+): Promise<void> {
+  const normalizedThreadId = threadId.trim()
+  if (!normalizedThreadId) return
+
+  const params: Record<string, unknown> = { threadId: normalizedThreadId }
+  if ('model' in settings) {
+    const model = settings.model?.trim() ?? ''
+    params.model = model || null
+  }
+  if ('effort' in settings) {
+    params.effort = settings.effort || null
+  }
+  if ('permissions' in settings) {
+    const permissions = settings.permissions?.trim() ?? ''
+    params.permissions = permissions || null
+  }
+
+  await callRpc('thread/settings/update', params)
+}
+
 export async function getAvailableCollaborationModes(): Promise<CollaborationModeOption[]> {
   try {
     const payload = await callRpc<CollaborationModeListResponse>('collaborationMode/list', {})
@@ -1610,10 +1760,42 @@ export async function searchThreads(
   query: string,
   limit = 200,
 ): Promise<ThreadSearchResult> {
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) {
+    return { threadIds: [], indexedThreadCount: 0 }
+  }
+
+  try {
+    const threadIds: string[] = []
+    let cursor: string | null = null
+    let pageCount = 0
+
+    do {
+      const payload: ThreadSearchResponse = await callRpc<ThreadSearchResponse>('thread/search', {
+        searchTerm: normalizedQuery,
+        cursor,
+        limit: Math.min(Math.max(limit - threadIds.length, 1), 200),
+        archived: false,
+        sortDirection: 'desc',
+      })
+      for (const row of Array.isArray(payload.data) ? payload.data : []) {
+        const threadId = typeof row.thread?.id === 'string' ? row.thread.id.trim() : ''
+        if (threadId) threadIds.push(threadId)
+        if (threadIds.length >= limit) break
+      }
+      cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
+      pageCount += 1
+    } while (cursor && threadIds.length < limit && pageCount < 100)
+
+    return { threadIds, indexedThreadCount: threadIds.length }
+  } catch {
+    // Older app-server builds do not expose thread/search. Keep the local bridge fallback.
+  }
+
   const response = await fetch('/codex-api/thread-search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, limit }),
+    body: JSON.stringify({ query: normalizedQuery, limit }),
   })
   const payload = (await response.json()) as { data?: ThreadSearchResult; error?: string }
   if (!response.ok) {

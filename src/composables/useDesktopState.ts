@@ -6,6 +6,7 @@ import {
   getAvailableCollaborationModes,
   getAccountRateLimits,
   getAvailableModels,
+  listPermissionProfiles,
   renameThread,
   getCurrentModelConfig,
   getPendingServerRequests,
@@ -30,7 +31,9 @@ import {
   subscribeCodexNotifications,
   steerThreadTurn,
   startThreadTurn,
+  updateThreadSettings as updateThreadSettingsRpc,
   type RpcNotification,
+  type UiPermissionProfile,
   type SkillInfo,
   type MentionParam,
 } from '../api/codexGateway'
@@ -76,6 +79,7 @@ const PROJECT_DISPLAY_NAME_STORAGE_KEY = 'codex-web-local.project-display-name.v
 const COLLABORATION_MODE_STORAGE_KEY = 'codex-web-local.collaboration-mode-by-context.v1'
 const LEGACY_COLLABORATION_MODE_STORAGE_KEY = 'codex-web-local.collaboration-mode.v1'
 const MODEL_PREFERENCE_STORAGE_KEY = 'codex-web-local.model-preference-by-context.v1'
+const PERMISSION_PROFILE_STORAGE_KEY = 'codex-web-local.permission-profile-by-thread.v1'
 const NEW_THREAD_COLLABORATION_MODE_CONTEXT = '__new-thread__'
 const EVENT_SYNC_DEBOUNCE_MS = 220
 const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
@@ -217,6 +221,39 @@ function saveSelectedModelPreferenceMap(state: Record<string, ModelPreferenceSta
     return
   }
   window.localStorage.setItem(MODEL_PREFERENCE_STORAGE_KEY, JSON.stringify(state))
+}
+
+function loadSelectedPermissionProfileMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const raw = window.localStorage.getItem(PERMISSION_PROFILE_STORAGE_KEY)
+    if (!raw) return {}
+
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+
+    const next: Record<string, string> = {}
+    for (const [threadId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      const normalizedThreadId = threadId.trim()
+      const profileId = typeof value === 'string' ? value.trim() : ''
+      if (normalizedThreadId && profileId) {
+        next[normalizedThreadId] = profileId
+      }
+    }
+    return next
+  } catch {
+    return {}
+  }
+}
+
+function saveSelectedPermissionProfileMap(state: Record<string, string>): void {
+  if (typeof window === 'undefined') return
+  if (Object.keys(state).length === 0) {
+    window.localStorage.removeItem(PERMISSION_PROFILE_STORAGE_KEY)
+    return
+  }
+  window.localStorage.setItem(PERMISSION_PROFILE_STORAGE_KEY, JSON.stringify(state))
 }
 
 function clamp(value: number, minValue: number, maxValue: number): number {
@@ -903,6 +940,11 @@ export function useDesktopState() {
   const defaultReasoningEffort = ref<ReasoningEffort | ''>('medium')
   const selectedModelId = ref('')
   const selectedReasoningEffort = ref<ReasoningEffort | ''>('medium')
+  const availablePermissionProfiles = ref<UiPermissionProfile[]>([])
+  const selectedPermissionProfileByThreadId = ref<Record<string, string>>(
+    loadSelectedPermissionProfileMap(),
+  )
+  const selectedPermissionProfileId = ref(selectedPermissionProfileByThreadId.value[selectedThreadId.value] ?? '')
   const readStateByThreadId = ref<Record<string, string>>(loadReadStateMap())
   const scrollStateByThreadId = ref<Record<string, ThreadScrollState>>(loadThreadScrollStateMap())
   const projectOrder = ref<string[]>(loadProjectOrder())
@@ -1023,6 +1065,7 @@ export function useDesktopState() {
       selectedCollaborationModeByContext.value,
       nextThreadId,
     )
+    selectedPermissionProfileId.value = selectedPermissionProfileByThreadId.value[nextThreadId] ?? ''
     setSelectedModelPreferenceContext(nextThreadId)
     activeReasoningItemId = ''
     shouldAutoScrollOnNextAgentEvent = false
@@ -1082,7 +1125,28 @@ export function useDesktopState() {
     applySelectedModelPreference(normalizedContextId)
   }
 
-  function setSelectedModelId(modelId: string, contextId = selectedModelPreferenceContextId.value): void {
+  function syncThreadSettingsForContext(
+    contextId: string,
+    settings: {
+      model?: string | null
+      effort?: ReasoningEffort | null
+      permissions?: string | null
+    },
+  ): void {
+    const threadId = selectedThreadId.value
+    if (!threadId) return
+    if (toModelPreferenceContextId(contextId) !== toModelPreferenceContextId(threadId)) return
+
+    void updateThreadSettingsRpc(threadId, settings).catch((unknownError) => {
+      error.value = unknownError instanceof Error ? unknownError.message : 'Failed to update thread settings'
+    })
+  }
+
+  function setSelectedModelId(
+    modelId: string,
+    contextId = selectedModelPreferenceContextId.value,
+    options: { syncRemote?: boolean } = {},
+  ): void {
     selectedModelId.value = modelId.trim()
     selectedReasoningEffort.value = resolveReasoningEffortForModel(
       availableModels.value,
@@ -1090,6 +1154,12 @@ export function useDesktopState() {
       selectedReasoningEffort.value,
     )
     saveModelPreferenceForContext(contextId, selectedModelId.value, selectedReasoningEffort.value)
+    if (options.syncRemote !== false) {
+      syncThreadSettingsForContext(contextId, {
+        model: selectedModelId.value || null,
+        effort: selectedReasoningEffort.value || null,
+      })
+    }
   }
 
   function setSelectedCollaborationMode(mode: CollaborationModeKind): void {
@@ -1366,12 +1436,49 @@ export function useDesktopState() {
   function setSelectedReasoningEffort(
     effort: ReasoningEffort | '',
     contextId = selectedModelPreferenceContextId.value,
+    options: { syncRemote?: boolean } = {},
   ): void {
     if (effort && !REASONING_EFFORT_OPTIONS.includes(effort)) {
       return
     }
     selectedReasoningEffort.value = effort
     saveModelPreferenceForContext(contextId, selectedModelId.value, selectedReasoningEffort.value)
+    if (options.syncRemote !== false) {
+      syncThreadSettingsForContext(contextId, { effort: selectedReasoningEffort.value || null })
+    }
+  }
+
+  function setSelectedPermissionProfileId(profileId: string, options: { syncRemote?: boolean } = {}): void {
+    const threadId = selectedThreadId.value
+    if (!threadId) return
+
+    const normalizedProfileId = profileId.trim()
+    selectedPermissionProfileId.value = normalizedProfileId
+    selectedPermissionProfileByThreadId.value = normalizedProfileId
+      ? {
+          ...selectedPermissionProfileByThreadId.value,
+          [threadId]: normalizedProfileId,
+        }
+      : omitKey(selectedPermissionProfileByThreadId.value, threadId)
+    saveSelectedPermissionProfileMap(selectedPermissionProfileByThreadId.value)
+
+    if (options.syncRemote !== false) {
+      syncThreadSettingsForContext(threadId, { permissions: normalizedProfileId || null })
+    }
+  }
+
+  async function refreshPermissionProfiles(): Promise<void> {
+    try {
+      availablePermissionProfiles.value = await listPermissionProfiles(selectedThread.value?.cwd)
+      if (
+        selectedPermissionProfileId.value &&
+        !availablePermissionProfiles.value.some((profile) => profile.id === selectedPermissionProfileId.value)
+      ) {
+        setSelectedPermissionProfileId('', { syncRemote: false })
+      }
+    } catch {
+      // Keep the last known permission profiles on transient failures.
+    }
   }
 
   async function refreshCollaborationModes(): Promise<void> {
@@ -1999,9 +2106,24 @@ export function useDesktopState() {
       saveModelPreferenceForContext(threadId, model, effort)
       if (selectedThreadId.value === threadId) {
         if (model) {
-          setSelectedModelId(model, threadId)
+          setSelectedModelId(model, threadId, { syncRemote: false })
         }
-        setSelectedReasoningEffort(effort, threadId)
+        setSelectedReasoningEffort(effort, threadId, { syncRemote: false })
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(settings, 'permissions')) {
+      const permissions = readString(settings.permissions)
+      if (selectedThreadId.value === threadId) {
+        setSelectedPermissionProfileId(permissions, { syncRemote: false })
+      } else {
+        selectedPermissionProfileByThreadId.value = permissions
+          ? {
+              ...selectedPermissionProfileByThreadId.value,
+              [threadId]: permissions,
+            }
+          : omitKey(selectedPermissionProfileByThreadId.value, threadId)
+        saveSelectedPermissionProfileMap(selectedPermissionProfileByThreadId.value)
       }
     }
 
@@ -3195,6 +3317,7 @@ export function useDesktopState() {
       const ancillaryRefresh = Promise.allSettled([
         refreshModelPreferences(),
         refreshCollaborationModes(),
+        refreshPermissionProfiles(),
         refreshSkills(),
         refreshCodexRateLimits(),
       ]).then(() => undefined)
@@ -3216,6 +3339,7 @@ export function useDesktopState() {
 
     try {
       await loadMessages(threadId)
+      void refreshPermissionProfiles()
     } catch (unknownError) {
       error.value = unknownError instanceof Error ? unknownError.message : 'Unknown application error'
     }
@@ -4177,9 +4301,11 @@ export function useDesktopState() {
     availableCollaborationModes,
     availableModels,
     availableModelIds,
+    availablePermissionProfiles,
     selectedCollaborationMode,
     selectedModelId,
     selectedReasoningEffort,
+    selectedPermissionProfileId,
     installedSkills,
     messages,
     isLoadingThreads,
@@ -4208,6 +4334,7 @@ export function useDesktopState() {
     setSelectedModelPreferenceContext,
     setSelectedModelId,
     setSelectedReasoningEffort,
+    setSelectedPermissionProfileId,
     respondToPendingServerRequest,
     renameProject,
     removeProject,
