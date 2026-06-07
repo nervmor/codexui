@@ -1344,7 +1344,7 @@ class MethodCatalog {
 
   private async runGenerateSchemaCommand(outDir: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      const process = spawn('codex', ['app-server', 'generate-json-schema', '--out', outDir], {
+      const process = spawn('codex', ['app-server', 'generate-json-schema', '--out', outDir, '--experimental'], {
         stdio: ['ignore', 'ignore', 'pipe'],
       })
 

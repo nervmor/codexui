@@ -112,8 +112,8 @@ async function compareDirs(expectedDir, actualDir) {
 async function generateSchemas(outDir) {
   const jsonDir = path.join(outDir, 'json')
   const typescriptDir = path.join(outDir, 'typescript')
-  await runCodex(['app-server', 'generate-json-schema', '--out', jsonDir])
-  await runCodex(['app-server', 'generate-ts', '--out', typescriptDir])
+  await runCodex(['app-server', 'generate-json-schema', '--out', jsonDir, '--experimental'])
+  await runCodex(['app-server', 'generate-ts', '--out', typescriptDir, '--experimental'])
 }
 
 async function replaceDir(sourceDir, targetDir) {
