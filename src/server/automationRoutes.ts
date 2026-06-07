@@ -122,6 +122,11 @@ type AutomationRuntimeState = {
 const AUTOMATION_STORE_VERSION = 1
 const MAX_AUTOMATION_RUNS = 250
 const SCHEDULER_INTERVAL_MS = 30_000
+const MAX_AUTOMATION_EXEC_ATTEMPTS = 2
+const AUTOMATION_STREAM_RECOVERY_PROMPT = [
+  'The previous automation turn was interrupted by a transient response stream disconnect before it completed.',
+  'Continue the same automation task from the current thread state and produce the final answer.',
+].join(' ')
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -521,13 +526,30 @@ function formatRunItem(rawItem: unknown, eventType: string): AutomationRunItem |
   return { id, type, title: type.replace(/_/g, ' '), status, body: summarizeJsonValue(item) }
 }
 
-function collectExecEvent(event: unknown, state: {
+type ExecEventState = {
   threadId: string
   usage: AutomationUsage | null
   itemsById: Map<string, AutomationRunItem>
   finalMessage: string
   turnFailure: string
-}): void {
+  streamError: string
+  turnCompleted: boolean
+}
+
+type ExecAttemptResult = {
+  exitCode: number | null
+  stderr: string
+}
+
+function isRetryableStreamError(value: string): boolean {
+  const normalized = value.toLowerCase()
+  return normalized.includes('stream disconnected before completion')
+    || normalized.includes('response stream')
+    || normalized.includes('connection reset by peer')
+    || normalized.includes('error sending request for url')
+}
+
+function collectExecEvent(event: unknown, state: ExecEventState): void {
   const record = asRecord(event)
   if (!record) return
   const type = readString(record.type)
@@ -537,15 +559,19 @@ function collectExecEvent(event: unknown, state: {
   }
   if (type === 'turn.completed') {
     state.usage = usageFromEvent(record)
+    state.turnCompleted = true
+    state.turnFailure = ''
+    state.streamError = ''
     return
   }
   if (type === 'turn.failed') {
     const error = asRecord(record.error)
     state.turnFailure = readString(error?.message) || readString(record.message) || 'Automation turn failed'
+    state.turnCompleted = false
     return
   }
   if (type === 'error') {
-    state.turnFailure = readString(record.message) || 'Automation event stream failed'
+    state.streamError = readString(record.message) || 'Automation event stream failed'
     return
   }
   if (type === 'item.started' || type === 'item.updated' || type === 'item.completed') {
@@ -786,9 +812,12 @@ class AutomationManager {
     ))
   }
 
-  private async executeRun(automation: AutomationRecord, runRecord: AutomationRunRecord): Promise<void> {
-    const prompt = buildPromptWithSkills(automation.prompt, automation.skillNames)
-    const { outputSchemaPath } = this.buildRunPaths(runRecord.id)
+  private buildExecArgs(
+    automation: AutomationRecord,
+    runRecord: AutomationRunRecord,
+    outputSchemaPath: string,
+    resumeThreadId: string,
+  ): string[] {
     const args = ['exec', '--json', '--skip-git-repo-check', '-C', runRecord.cwd, '-o', runRecord.outputPath]
 
     if (runRecord.model) {
@@ -801,7 +830,6 @@ class AutomationManager {
       args.push('-c', `model_reasoning_effort="${runRecord.reasoningEffort}"`)
     }
     if (automation.outputSchema.trim()) {
-      await writeFile(outputSchemaPath, automation.outputSchema.trim(), 'utf8')
       args.push('--output-schema', outputSchemaPath)
     }
     if (automation.ephemeral) {
@@ -825,22 +853,27 @@ class AutomationManager {
     if (automation.approvalsReviewer !== 'default') {
       args.push('-c', `approvals_reviewer="${automation.approvalsReviewer}"`)
     }
-    if (runRecord.resumedThreadId) {
-      args.push('resume', runRecord.resumedThreadId, '-')
+    if (resumeThreadId) {
+      args.push('resume', resumeThreadId, '-')
     } else {
       args.push('-')
     }
+    return args
+  }
 
-    const eventStream = createWriteStream(runRecord.eventLogPath, { flags: 'w' })
+  private async runExecAttempt(
+    args: string[],
+    prompt: string,
+    runRecord: AutomationRunRecord,
+    eventState: ExecEventState,
+    appendEvents: boolean,
+  ): Promise<ExecAttemptResult> {
+    const eventStream = createWriteStream(runRecord.eventLogPath, { flags: appendEvents ? 'a' : 'w' })
+    if (appendEvents) {
+      eventStream.write('\n')
+    }
     let stdoutBuffer = ''
     let stderrBuffer = ''
-    const eventState = {
-      threadId: runRecord.resumedThreadId,
-      usage: null as AutomationUsage | null,
-      itemsById: new Map<string, AutomationRunItem>(),
-      finalMessage: '',
-      turnFailure: '',
-    }
 
     const exitCode = await new Promise<number | null>((resolvePromise, reject) => {
       const proc = spawn('codex', args, {
@@ -881,10 +914,50 @@ class AutomationManager {
             // Keep the event log verbatim even if parsing fails.
           }
         }
-        eventStream.end()
-        resolvePromise(code)
+        eventStream.end(() => {
+          resolvePromise(code)
+        })
       })
     })
+
+    return { exitCode, stderr: stderrBuffer }
+  }
+
+  private async executeRun(automation: AutomationRecord, runRecord: AutomationRunRecord): Promise<void> {
+    const prompt = buildPromptWithSkills(automation.prompt, automation.skillNames)
+    const { outputSchemaPath } = this.buildRunPaths(runRecord.id)
+    if (automation.outputSchema.trim()) {
+      await writeFile(outputSchemaPath, automation.outputSchema.trim(), 'utf8')
+    }
+    const eventState: ExecEventState = {
+      threadId: runRecord.resumedThreadId,
+      usage: null as AutomationUsage | null,
+      itemsById: new Map<string, AutomationRunItem>(),
+      finalMessage: '',
+      turnFailure: '',
+      streamError: '',
+      turnCompleted: false,
+    }
+
+    let lastAttempt: ExecAttemptResult = { exitCode: null, stderr: '' }
+    let resumeThreadId = runRecord.resumedThreadId
+    let attemptPrompt = prompt
+    for (let attemptIndex = 0; attemptIndex < MAX_AUTOMATION_EXEC_ATTEMPTS; attemptIndex += 1) {
+      const args = this.buildExecArgs(automation, runRecord, outputSchemaPath, resumeThreadId)
+      lastAttempt = await this.runExecAttempt(args, attemptPrompt, runRecord, eventState, attemptIndex > 0)
+      if (eventState.turnCompleted || eventState.turnFailure || lastAttempt.exitCode === 0) {
+        break
+      }
+
+      const streamFailureText = [eventState.streamError, lastAttempt.stderr].filter(Boolean).join('\n')
+      const canRecover = isRetryableStreamError(streamFailureText) && attemptIndex + 1 < MAX_AUTOMATION_EXEC_ATTEMPTS
+      if (!canRecover) {
+        break
+      }
+
+      resumeThreadId = eventState.threadId
+      attemptPrompt = resumeThreadId ? AUTOMATION_STREAM_RECOVERY_PROMPT : prompt
+    }
 
     let finalMessage = ''
     try {
@@ -895,10 +968,10 @@ class AutomationManager {
     finalMessage = eventState.finalMessage || finalMessage
     const structuredResult = parseStructuredResult(finalMessage)
 
-    const runFailed = exitCode !== 0 || Boolean(eventState.turnFailure)
+    const runFailed = Boolean(eventState.turnFailure) || (!eventState.turnCompleted && lastAttempt.exitCode !== 0)
     const errorText = !runFailed
       ? ''
-      : eventState.turnFailure || trimRunSummary(stderrBuffer.trim()) || 'Automation run failed'
+      : eventState.turnFailure || trimRunSummary(eventState.streamError) || trimRunSummary(lastAttempt.stderr.trim()) || 'Automation run failed'
     const hasFindings = !runFailed && detectFindings(finalMessage, structuredResult)
     const archived = !runFailed && automation.autoArchiveEmpty && !hasFindings
     const summary = !runFailed
