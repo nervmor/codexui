@@ -166,8 +166,11 @@
             <div class="plugins-hub-list-main">
               <div class="plugins-hub-card-title-row">
                 <span class="plugins-hub-card-title">{{ server.name }}</span>
+                <span v-if="server.title && server.title !== server.name" class="plugins-hub-card-badge-muted">{{ server.title }}</span>
                 <span class="plugins-hub-card-badge-muted">{{ formatAuthStatus(server.authStatus) }}</span>
+                <span v-if="server.version" class="plugins-hub-card-badge-muted">{{ server.version }}</span>
               </div>
+              <p v-if="server.description" class="plugins-hub-card-description">{{ server.description }}</p>
               <p class="plugins-hub-list-meta">
                 {{ server.tools.length }} tools · {{ server.resourceCount }} resources · {{ server.resourceTemplateCount }} templates
               </p>
@@ -430,7 +433,13 @@ function matchesApp(app: UiAppInfo, q: string): boolean {
 
 function matchesMcp(server: UiMcpServerStatus, q: string): boolean {
   if (!q) return true
-  if (server.name.toLowerCase().includes(q)) return true
+  if ([
+    server.name,
+    server.title,
+    server.version,
+    server.description,
+    server.websiteUrl,
+  ].some((value) => value.toLowerCase().includes(q))) return true
   return server.tools.some((tool) =>
     tool.name.toLowerCase().includes(q) || tool.description.toLowerCase().includes(q),
   )

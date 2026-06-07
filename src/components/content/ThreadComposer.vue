@@ -741,12 +741,21 @@ function formatWindowSummary(window: UiRateLimitWindow): string {
   return span ? `${remainingPercent}% / ${span}` : `${remainingPercent}%`
 }
 
+function formatIndividualLimitSummary(quota: UiRateLimitSnapshot): string {
+  const individualLimit = quota.individualLimit
+  if (!individualLimit) return ''
+  const remainingPercent = Math.max(0, Math.min(100, Math.round(individualLimit.remainingPercent)))
+  return `${remainingPercent}% personal`
+}
+
 function buildQuotaSummaryText(quota: UiRateLimitSnapshot | null): string {
   if (!quota) return ''
 
   const segments: string[] = []
   const plan = formatPlanType(quota.planType)
   if (plan) segments.push(plan)
+  const individualLimitSummary = formatIndividualLimitSummary(quota)
+  if (individualLimitSummary) segments.push(individualLimitSummary)
   if (quota.primary) segments.push(formatWindowSummary(quota.primary))
   if (quota.secondary) segments.push(formatWindowSummary(quota.secondary))
 
@@ -782,6 +791,17 @@ function buildQuotaTooltipText(quota: UiRateLimitSnapshot | null): string {
   if (quota.secondary) {
     const reset = formatResetTime(quota.secondary.resetsAt)
     lines.push(`Secondary window: ${formatWindowSummary(quota.secondary)}${reset ? `, ${reset}` : ''}`)
+  }
+
+  if (quota.individualLimit) {
+    const reset = formatResetTime(quota.individualLimit.resetsAt)
+    const parts = [
+      `${Math.round(quota.individualLimit.remainingPercent)}% remaining`,
+      quota.individualLimit.limit ? `limit ${quota.individualLimit.limit}` : '',
+      quota.individualLimit.used ? `used ${quota.individualLimit.used}` : '',
+      reset,
+    ].filter((part) => part.length > 0)
+    lines.push(`Personal limit: ${parts.join(', ')}`)
   }
 
   if (quota.credits?.unlimited) {

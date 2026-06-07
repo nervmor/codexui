@@ -350,6 +350,7 @@ function toUiMessages(item: ThreadItem): UiMessage[] {
     if (hasRenderableUserContent) {
       messages.push({
         id: item.id,
+        clientId: typeof item.clientId === 'string' ? item.clientId : null,
         role: 'user',
         text: parsed.text,
         images: parsed.images,

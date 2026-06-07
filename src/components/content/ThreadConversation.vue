@@ -672,6 +672,13 @@
                 <button type="button" class="request-button" @click="onRespondApproval(request.id, 'cancel')">Cancel</button>
               </section>
 
+              <section v-else-if="request.method === 'execCommandApproval' || request.method === 'applyPatchApproval'" class="request-actions">
+                <button type="button" class="request-button request-button-primary" @click="onRespondReviewApproval(request.id, 'approved')">Approve</button>
+                <button type="button" class="request-button" @click="onRespondReviewApproval(request.id, 'approved_for_session')">Approve for Session</button>
+                <button type="button" class="request-button" @click="onRespondReviewApproval(request.id, 'denied')">Deny</button>
+                <button type="button" class="request-button" @click="onRespondReviewApproval(request.id, 'abort')">Abort</button>
+              </section>
+
               <section v-else-if="request.method === 'item/tool/requestUserInput'" class="request-user-input">
                 <div
                   v-for="question in readToolQuestions(request)"
@@ -3336,6 +3343,13 @@ function onQuestionOtherAnswerInput(requestId: number, questionId: string, event
 }
 
 function onRespondApproval(requestId: number, decision: 'accept' | 'acceptForSession' | 'decline' | 'cancel'): void {
+  emit('respondServerRequest', {
+    id: requestId,
+    result: { decision },
+  })
+}
+
+function onRespondReviewApproval(requestId: number, decision: 'approved' | 'approved_for_session' | 'denied' | 'abort'): void {
   emit('respondServerRequest', {
     id: requestId,
     result: { decision },

@@ -53,6 +53,7 @@ import type {
   UiReviewWorkspaceView,
   UiRateLimitSnapshot,
   UiRateLimitWindow,
+  UiSpendControlLimitSnapshot,
   UiThreadGoal,
   UiThreadGoalStatus,
 } from '../types/codex'
@@ -72,6 +73,14 @@ type ThreadGoalSetResponse = {
 
 type ThreadGoalClearResponse = {
   cleared: boolean
+}
+
+type TurnSteerResponse = {
+  turnId: string
+}
+
+type CollaborationModeListResponse = {
+  data?: unknown[]
 }
 
 export type ThreadGoalSetPayload = {
@@ -209,6 +218,21 @@ function normalizeCreditsSnapshot(value: unknown): UiCreditsSnapshot | null {
   }
 }
 
+function normalizeSpendControlLimitSnapshot(value: unknown): UiSpendControlLimitSnapshot | null {
+  const record = asRecord(value)
+  if (!record) return null
+
+  const remainingPercent = readNumber(record.remainingPercent ?? record.remaining_percent)
+  if (remainingPercent === null) return null
+
+  return {
+    limit: readString(record.limit) ?? '',
+    used: readString(record.used) ?? '',
+    remainingPercent,
+    resetsAt: readNumber(record.resetsAt ?? record.resets_at) ?? 0,
+  }
+}
+
 function normalizeRateLimitSnapshot(value: unknown): UiRateLimitSnapshot | null {
   const record = asRecord(value)
   if (!record) return null
@@ -216,8 +240,9 @@ function normalizeRateLimitSnapshot(value: unknown): UiRateLimitSnapshot | null 
   const primary = normalizeRateLimitWindow(record.primary)
   const secondary = normalizeRateLimitWindow(record.secondary)
   const credits = normalizeCreditsSnapshot(record.credits)
+  const individualLimit = normalizeSpendControlLimitSnapshot(record.individualLimit ?? record.individual_limit)
 
-  if (!primary && !secondary && !credits) return null
+  if (!primary && !secondary && !credits && !individualLimit) return null
 
   return {
     limitId: readString(record.limitId ?? record.limit_id),
@@ -225,6 +250,7 @@ function normalizeRateLimitSnapshot(value: unknown): UiRateLimitSnapshot | null 
     primary,
     secondary,
     credits,
+    individualLimit,
     planType: readString(record.planType ?? record.plan_type),
   }
 }
@@ -1079,6 +1105,7 @@ export async function startThreadTurn(
   mentions?: MentionParam[],
   fileAttachments: FileAttachmentParam[] = [],
   collaborationMode?: CollaborationModeKind,
+  clientUserMessageId?: string,
 ): Promise<string> {
   try {
     const normalizedModel = model?.trim() ?? ''
@@ -1108,6 +1135,7 @@ export async function startThreadTurn(
       threadId,
       input,
     }
+    if (clientUserMessageId?.trim()) params.clientUserMessageId = clientUserMessageId.trim()
     const collaborationModeSettings = collaborationMode
       ? await resolveCollaborationModeSettings(collaborationMode, normalizedModel, effort)
       : null
@@ -1121,6 +1149,58 @@ export async function startThreadTurn(
     return readString(response?.turn?.id)?.trim() ?? ''
   } catch (error) {
     throw normalizeCodexApiError(error, `Failed to start turn for thread ${threadId}`, 'turn/start')
+  }
+}
+
+export async function steerThreadTurn(
+  threadId: string,
+  expectedTurnId: string,
+  text: string,
+  imageUrls: string[] = [],
+  skills?: Array<{ name: string; path: string }>,
+  mentions?: MentionParam[],
+  fileAttachments: FileAttachmentParam[] = [],
+  clientUserMessageId?: string,
+): Promise<string> {
+  try {
+    const normalizedExpectedTurnId = expectedTurnId.trim()
+    if (!normalizedExpectedTurnId) {
+      throw new Error('turn/steer requires expectedTurnId')
+    }
+
+    const textWithMentions = buildTextWithMentions(text, mentions ?? [])
+    const finalText = buildTextWithAttachments(textWithMentions, fileAttachments)
+    const input: Array<Record<string, unknown>> = [{ type: 'text', text: finalText, text_elements: [] }]
+    for (const imageUrl of imageUrls) {
+      const normalizedUrl = imageUrl.trim()
+      if (!normalizedUrl) continue
+      input.push({
+        type: 'image',
+        url: normalizedUrl,
+      })
+    }
+    if (skills) {
+      for (const skill of skills) {
+        input.push({ type: 'skill', name: skill.name, path: skill.path })
+      }
+    }
+    if (mentions) {
+      for (const mention of mentions) {
+        if (!mention.name.trim() || !mention.path.trim()) continue
+        input.push({ type: 'mention', name: mention.name, path: mention.path })
+      }
+    }
+
+    const params: Record<string, unknown> = {
+      threadId,
+      expectedTurnId: normalizedExpectedTurnId,
+      input,
+    }
+    if (clientUserMessageId?.trim()) params.clientUserMessageId = clientUserMessageId.trim()
+    const response = await callRpc<TurnSteerResponse>('turn/steer', params)
+    return readString(response?.turnId)?.trim() ?? normalizedExpectedTurnId
+  } catch (error) {
+    throw normalizeCodexApiError(error, `Failed to steer turn for thread ${threadId}`, 'turn/steer')
   }
 }
 
@@ -1167,7 +1247,27 @@ export async function getCurrentModelConfig(): Promise<CurrentModelConfig> {
 }
 
 export async function getAvailableCollaborationModes(): Promise<CollaborationModeOption[]> {
-  return DEFAULT_COLLABORATION_MODE_OPTIONS
+  try {
+    const payload = await callRpc<CollaborationModeListResponse>('collaborationMode/list', {})
+    const rows = Array.isArray(payload.data) ? payload.data : []
+    const options: CollaborationModeOption[] = []
+    const seen = new Set<CollaborationModeKind>()
+
+    for (const row of rows) {
+      const record = asRecord(row)
+      const mode = record?.mode === 'plan' ? 'plan' : record?.mode === 'default' ? 'default' : null
+      if (!mode || seen.has(mode)) continue
+      seen.add(mode)
+      options.push({
+        value: mode,
+        label: readString(record?.name) ?? (mode === 'plan' ? 'Plan' : 'Default'),
+      })
+    }
+
+    return options.length > 0 ? options : DEFAULT_COLLABORATION_MODE_OPTIONS
+  } catch {
+    return DEFAULT_COLLABORATION_MODE_OPTIONS
+  }
 }
 
 function normalizeWorkspaceRootsState(payload: unknown): WorkspaceRootsState {
@@ -2179,6 +2279,10 @@ export type UiMcpToolInfo = {
 
 export type UiMcpServerStatus = {
   name: string
+  title: string
+  version: string
+  description: string
+  websiteUrl: string
   authStatus: string
   tools: UiMcpToolInfo[]
   resourceCount: number
@@ -2447,6 +2551,7 @@ export async function listMcpServers(limit = 100): Promise<UiMcpServerStatus[]> 
       if (!server) return []
       const name = readString(server.name)
       if (!name) return []
+      const serverInfo = asRecord(server.serverInfo)
       const toolsRecord = asRecord(server.tools)
       const tools: UiMcpToolInfo[] = []
       if (toolsRecord) {
@@ -2460,6 +2565,10 @@ export async function listMcpServers(limit = 100): Promise<UiMcpServerStatus[]> 
       }
       return [{
         name,
+        title: readString(serverInfo?.title) ?? readString(serverInfo?.name) ?? '',
+        version: readString(serverInfo?.version) ?? '',
+        description: readString(serverInfo?.description) ?? '',
+        websiteUrl: readString(serverInfo?.websiteUrl ?? serverInfo?.website_url) ?? '',
         authStatus: readString(server.authStatus) ?? 'unsupported',
         tools,
         resourceCount: Array.isArray(server.resources) ? server.resources.length : 0,

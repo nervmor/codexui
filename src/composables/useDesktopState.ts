@@ -28,6 +28,7 @@ import {
   resumeThread,
   startThread,
   subscribeCodexNotifications,
+  steerThreadTurn,
   startThreadTurn,
   type RpcNotification,
   type SkillInfo,
@@ -448,6 +449,7 @@ function isUnsupportedChatGptModelError(error: unknown): boolean {
 function areMessageFieldsEqual(first: UiMessage, second: UiMessage): boolean {
   return (
     first.id === second.id &&
+    first.clientId === second.clientId &&
     first.role === second.role &&
     first.text === second.text &&
     areStringArraysEqual(first.images, second.images) &&
@@ -601,6 +603,13 @@ type TurnCompletedInfo = {
 }
 
 const WORKED_MESSAGE_TYPE = 'worked'
+
+function createClientUserMessageId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 function parseIsoTimestamp(value: string): number | null {
   if (!value) return null
@@ -854,6 +863,7 @@ export function useDesktopState() {
   type FileAttachment = { label: string; path: string; fsPath: string }
   type QueuedMessage = {
     id: string
+    clientUserMessageId: string
     text: string
     imageUrls: string[]
     skills: Array<{ name: string; path: string }>
@@ -862,6 +872,7 @@ export function useDesktopState() {
     collaborationMode: CollaborationModeKind
   }
   type PendingTurnRequest = {
+    clientUserMessageId: string
     text: string
     imageUrls: string[]
     skills: Array<{ name: string; path: string }>
@@ -1329,6 +1340,7 @@ export function useDesktopState() {
         pending.mentions.length > 0 ? pending.mentions : undefined,
         pending.fileAttachments,
         pending.collaborationMode,
+        pending.clientUserMessageId,
       )
       registerActiveTurn(threadId, startedTurnId)
 
@@ -1971,6 +1983,44 @@ export function useDesktopState() {
   function readThreadGoalCleared(notification: RpcNotification): string {
     if (notification.method !== 'thread/goal/cleared') return ''
     return extractThreadIdFromNotification(notification)
+  }
+
+  function applyThreadSettingsUpdate(notification: RpcNotification): boolean {
+    if (notification.method !== 'thread/settings/updated') return false
+
+    const threadId = extractThreadIdFromNotification(notification)
+    const params = asRecord(notification.params)
+    const settings = asRecord(params?.threadSettings ?? params?.thread_settings)
+    if (!threadId || !settings) return true
+
+    const model = readString(settings.model)
+    const effort = normalizeReasoningEffortPreference(readString(settings.effort))
+    if (model || effort) {
+      saveModelPreferenceForContext(threadId, model, effort)
+      if (selectedThreadId.value === threadId) {
+        if (model) {
+          setSelectedModelId(model, threadId)
+        }
+        setSelectedReasoningEffort(effort, threadId)
+      }
+    }
+
+    const collaborationMode = asRecord(settings.collaborationMode ?? settings.collaboration_mode)
+    const mode = normalizeCollaborationMode(collaborationMode?.mode)
+    if (selectedThreadId.value === threadId) {
+      setSelectedCollaborationMode(mode)
+    } else {
+      const contextId = toCollaborationModeContextId(threadId)
+      selectedCollaborationModeByContext.value = mode === 'plan'
+        ? {
+            ...selectedCollaborationModeByContext.value,
+            [contextId]: mode,
+          }
+        : omitKey(selectedCollaborationModeByContext.value, contextId)
+      saveSelectedCollaborationModeMap(selectedCollaborationModeByContext.value)
+    }
+
+    return true
   }
 
   function extractThreadIdFromNotification(notification: RpcNotification): string {
@@ -2657,6 +2707,10 @@ export function useDesktopState() {
       }
     }
 
+    if (applyThreadSettingsUpdate(notification)) {
+      return
+    }
+
     if (notification.method === 'account/rateLimits/updated') {
       setCodexRateLimit(pickCodexRateLimitSnapshot(notification.params))
       return
@@ -3317,6 +3371,7 @@ export function useDesktopState() {
     }
 
     const isInProgress = inProgressById.value[threadId] === true
+    const clientUserMessageId = createClientUserMessageId()
 
     if (isInProgress && mode === 'queue') {
       const queue = queuedMessagesByThreadId.value[threadId] ?? []
@@ -3327,6 +3382,7 @@ export function useDesktopState() {
           ...queue,
           {
             id,
+            clientUserMessageId,
             text: nextText,
             imageUrls,
             skills,
@@ -3341,7 +3397,7 @@ export function useDesktopState() {
 
     if (isInProgress) {
       shouldAutoScrollOnNextAgentEvent = true
-      void startTurnForThread(threadId, nextText, imageUrls, skills, mentions, fileAttachments).catch((unknownError) => {
+      void steerActiveTurnForThread(threadId, nextText, imageUrls, skills, mentions, fileAttachments, clientUserMessageId).catch((unknownError) => {
         const errorMessage = unknownError instanceof Error ? unknownError.message : 'Unknown application error'
         setTurnErrorForThread(threadId, errorMessage)
         error.value = errorMessage
@@ -3367,7 +3423,7 @@ export function useDesktopState() {
     setThreadInProgress(threadId, true)
 
     try {
-      await startTurnForThread(threadId, nextText, imageUrls, skills, mentions, fileAttachments)
+      await startTurnForThread(threadId, nextText, imageUrls, skills, mentions, fileAttachments, clientUserMessageId)
     } catch (unknownError) {
       shouldAutoScrollOnNextAgentEvent = false
       setThreadInProgress(threadId, false)
@@ -3545,6 +3601,7 @@ export function useDesktopState() {
     skills: Array<{ name: string; path: string }> = [],
     mentions: MentionParam[] = [],
     fileAttachments: FileAttachment[] = [],
+    clientUserMessageId = createClientUserMessageId(),
   ): Promise<void> {
     const modelId = selectedModelId.value.trim()
     const reasoningEffort = selectedReasoningEffort.value
@@ -3559,6 +3616,7 @@ export function useDesktopState() {
     const normalizedFileAttachments = fileAttachments.map((file) => ({ ...file }))
 
     setPendingTurnRequest(threadId, {
+      clientUserMessageId,
       text: normalizedText,
       imageUrls: [...imageUrls],
       skills: normalizedSkills,
@@ -3585,6 +3643,7 @@ export function useDesktopState() {
           mentions.length > 0 ? mentions : undefined,
           fileAttachments,
           collaborationMode,
+          clientUserMessageId,
         )
         registerActiveTurn(threadId, startedTurnId)
       } catch (unknownError) {
@@ -3603,6 +3662,7 @@ export function useDesktopState() {
             effort: reasoningEffort,
             collaborationMode,
             fallbackRetried: true,
+            clientUserMessageId,
           })
           const startedTurnId = await startThreadTurn(
             threadId,
@@ -3614,6 +3674,7 @@ export function useDesktopState() {
             mentions.length > 0 ? mentions : undefined,
             fileAttachments,
             collaborationMode,
+            clientUserMessageId,
           )
           registerActiveTurn(threadId, startedTurnId)
         } else {
@@ -3632,6 +3693,37 @@ export function useDesktopState() {
     } catch (unknownError) {
       throw unknownError
     }
+  }
+
+  async function steerActiveTurnForThread(
+    threadId: string,
+    nextText: string,
+    imageUrls: string[] = [],
+    skills: Array<{ name: string; path: string }> = [],
+    mentions: MentionParam[] = [],
+    fileAttachments: FileAttachment[] = [],
+    clientUserMessageId = createClientUserMessageId(),
+  ): Promise<void> {
+    let expectedTurnId = activeTurnIdByThreadId.value[threadId]
+    if (!expectedTurnId) {
+      await syncFromNotifications()
+      expectedTurnId = activeTurnIdByThreadId.value[threadId]
+    }
+    if (!expectedTurnId) {
+      throw new Error('Active turn is still initializing. Try sending again in a moment.')
+    }
+
+    const steeredTurnId = await steerThreadTurn(
+      threadId,
+      expectedTurnId,
+      nextText,
+      imageUrls,
+      skills.length > 0 ? skills : undefined,
+      mentions.length > 0 ? mentions : undefined,
+      fileAttachments,
+      clientUserMessageId,
+    )
+    registerActiveTurn(threadId, steeredTurnId || expectedTurnId)
   }
 
   async function processQueuedMessages(threadId: string): Promise<void> {
@@ -3661,7 +3753,7 @@ export function useDesktopState() {
     setThreadInProgress(threadId, true)
     try {
       setSelectedCollaborationMode(next.collaborationMode)
-      await startTurnForThread(threadId, next.text, next.imageUrls, next.skills, next.mentions, next.fileAttachments)
+      await startTurnForThread(threadId, next.text, next.imageUrls, next.skills, next.mentions, next.fileAttachments, next.clientUserMessageId)
     } catch {
       setThreadInProgress(threadId, false)
       setTurnActivityForThread(threadId, null)

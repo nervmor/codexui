@@ -96,6 +96,7 @@ export function normalizeCodexModels(rows: unknown[]): UiCodexModel[] {
       description: readString(record.description),
       hidden: readBoolean(record.hidden),
       defaultReasoningEffort,
+      defaultServiceTier: readString(record.defaultServiceTier) || null,
       supportedReasoningEfforts,
       isDefault: readBoolean(record.isDefault),
     })

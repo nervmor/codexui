@@ -883,6 +883,13 @@ function formatAccountQuota(account: UiAccountEntry): string {
     return account.quotaError || '402 Payment Required'
   }
   const quota = resolveDisplayedQuota(account)
+  if (quota?.individualLimit) {
+    const remainingPercent = Math.max(0, Math.min(100, Math.round(quota.individualLimit.remainingPercent)))
+    const refreshDate = formatResetDateCompact(quota.individualLimit.resetsAt)
+    return refreshDate
+      ? `${remainingPercent}% personal remaining · ${refreshDate}`
+      : `${remainingPercent}% personal remaining`
+  }
   const window = quota ? pickWeeklyQuotaWindow({ ...account, quotaSnapshot: quota }) : null
   if (window) {
     const remainingPercent = Math.max(0, Math.min(100, 100 - Math.round(window.usedPercent)))

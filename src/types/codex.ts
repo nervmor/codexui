@@ -17,6 +17,7 @@ export type UiCodexModel = {
   description: string
   hidden: boolean
   defaultReasoningEffort: ReasoningEffort
+  defaultServiceTier: string | null
   supportedReasoningEfforts: UiCodexModelReasoningOption[]
   isDefault: boolean
 }
@@ -225,6 +226,7 @@ export type UiThreadGoalCommand =
 
 export type UiMessage = {
   id: string
+  clientId?: string | null
   role: 'user' | 'assistant' | 'system'
   text: string
   images?: string[]
@@ -309,12 +311,20 @@ export type UiCreditsSnapshot = {
   balance: string | null
 }
 
+export type UiSpendControlLimitSnapshot = {
+  limit: string
+  used: string
+  remainingPercent: number
+  resetsAt: number
+}
+
 export type UiRateLimitSnapshot = {
   limitId: string | null
   limitName: string | null
   primary: UiRateLimitWindow | null
   secondary: UiRateLimitWindow | null
   credits: UiCreditsSnapshot | null
+  individualLimit: UiSpendControlLimitSnapshot | null
   planType: string | null
 }
 
