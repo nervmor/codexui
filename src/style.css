@@ -61,6 +61,19 @@
   @apply border-zinc-700;
 }
 
+:root.dark .sidebar-settings-select-row {
+  @apply border-zinc-700 text-zinc-300;
+}
+
+:root.dark .sidebar-settings-select-row + .sidebar-settings-row,
+:root.dark .sidebar-settings-row + .sidebar-settings-select-row {
+  @apply border-zinc-700;
+}
+
+:root.dark .sidebar-settings-select {
+  @apply border-zinc-600 bg-zinc-900 text-zinc-200 focus:border-zinc-500 disabled:bg-zinc-800 disabled:text-zinc-500;
+}
+
 :root.dark .sidebar-settings-account-section {
   @apply border-zinc-700 bg-zinc-800/70;
 }
@@ -236,6 +249,26 @@
 
 :root.dark .thread-composer-plan-toggle {
   @apply text-zinc-400 hover:text-zinc-200;
+}
+
+:root.dark .thread-composer-branch-pill {
+  @apply border-zinc-700 bg-zinc-900 text-zinc-300 shadow-none;
+}
+
+:root.dark .thread-composer-context-icon {
+  @apply text-zinc-400;
+}
+
+:root.dark .thread-composer-branch-control .composer-dropdown-trigger {
+  @apply text-zinc-300;
+}
+
+:root.dark .thread-composer-branch-control .composer-dropdown-chevron {
+  @apply text-zinc-500;
+}
+
+:root.dark .thread-composer-branch-status {
+  @apply text-zinc-500;
 }
 
 :root.dark .composer-dropdown-menu {
