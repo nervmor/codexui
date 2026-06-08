@@ -1765,43 +1765,28 @@ export async function searchThreads(
     return { threadIds: [], indexedThreadCount: 0 }
   }
 
-  try {
-    const threadIds: string[] = []
-    let cursor: string | null = null
-    let pageCount = 0
+  const threadIds: string[] = []
+  let cursor: string | null = null
+  let pageCount = 0
 
-    do {
-      const payload: ThreadSearchResponse = await callRpc<ThreadSearchResponse>('thread/search', {
-        searchTerm: normalizedQuery,
-        cursor,
-        limit: Math.min(Math.max(limit - threadIds.length, 1), 200),
-        archived: false,
-        sortDirection: 'desc',
-      })
-      for (const row of Array.isArray(payload.data) ? payload.data : []) {
-        const threadId = typeof row.thread?.id === 'string' ? row.thread.id.trim() : ''
-        if (threadId) threadIds.push(threadId)
-        if (threadIds.length >= limit) break
-      }
-      cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
-      pageCount += 1
-    } while (cursor && threadIds.length < limit && pageCount < 100)
+  do {
+    const payload: ThreadSearchResponse = await callRpc<ThreadSearchResponse>('thread/search', {
+      searchTerm: normalizedQuery,
+      cursor,
+      limit: Math.min(Math.max(limit - threadIds.length, 1), 200),
+      archived: false,
+      sortDirection: 'desc',
+    })
+    for (const row of Array.isArray(payload.data) ? payload.data : []) {
+      const threadId = typeof row.thread?.id === 'string' ? row.thread.id.trim() : ''
+      if (threadId) threadIds.push(threadId)
+      if (threadIds.length >= limit) break
+    }
+    cursor = typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0 ? payload.nextCursor : null
+    pageCount += 1
+  } while (cursor && threadIds.length < limit && pageCount < 100)
 
-    return { threadIds, indexedThreadCount: threadIds.length }
-  } catch {
-    // Older app-server builds do not expose thread/search. Keep the local bridge fallback.
-  }
-
-  const response = await fetch('/codex-api/thread-search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: normalizedQuery, limit }),
-  })
-  const payload = (await response.json()) as { data?: ThreadSearchResult; error?: string }
-  if (!response.ok) {
-    throw new Error(payload.error || 'Failed to search threads')
-  }
-  return payload.data ?? { threadIds: [], indexedThreadCount: 0 }
+  return { threadIds, indexedThreadCount: threadIds.length }
 }
 
 export type FileExplorerEntry = {

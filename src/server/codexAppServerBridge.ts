@@ -58,12 +58,6 @@ type PendingServerRequest = {
   receivedAtIso: string
 }
 
-type ThreadSearchDocument = {
-  id: string
-  title: string
-  preview: string
-}
-
 type SessionRecoveredFileChange = {
   path: string
   operation: 'add' | 'delete' | 'update'
@@ -331,15 +325,6 @@ function buildSessionFileChangeFallback(threadReadPayload: unknown, sessionLogRa
   }
 
   return recovered.sort((first, second) => first.turnIndex - second.turnIndex)
-}
-
-function isExactPhraseMatch(query: string, doc: ThreadSearchDocument): boolean {
-  const q = query.trim().toLowerCase()
-  if (!q) return false
-  return (
-    doc.title.toLowerCase().includes(q) ||
-    doc.preview.toLowerCase().includes(q)
-  )
 }
 
 function scoreFileCandidate(path: string, query: string): number {
@@ -1480,66 +1465,6 @@ function getSharedBridgeState(): SharedBridgeState {
   return created
 }
 
-function normalizeThreadSearchDocument(value: unknown): ThreadSearchDocument | null {
-  const record = asRecord(value)
-  if (!record) return null
-
-  const id = typeof record.id === 'string' ? record.id : ''
-  if (!id) return null
-
-  const title = typeof record.name === 'string' && record.name.trim().length > 0
-    ? record.name.trim()
-    : (typeof record.preview === 'string' && record.preview.trim().length > 0 ? record.preview.trim() : 'Untitled thread')
-  const preview = typeof record.preview === 'string' ? record.preview : ''
-
-  return {
-    id,
-    title,
-    preview,
-  }
-}
-
-async function loadThreadSearchDocuments(
-  appServer: AppServerProcess,
-  options: { query?: string; limit: number; useServerSearch: boolean },
-): Promise<{ docs: ThreadSearchDocument[]; scannedCount: number }> {
-  const docs: ThreadSearchDocument[] = []
-  let cursor: string | null = null
-  let scannedCount = 0
-  const pageLimit = Math.min(Math.max(options.limit, 1), 200)
-
-  do {
-    const params: Record<string, unknown> = {
-      archived: false,
-      limit: pageLimit,
-      sortKey: 'updated_at',
-      cursor,
-    }
-    if (options.useServerSearch && options.query) {
-      params.searchTerm = options.query
-      params.useStateDbOnly = true
-    }
-
-    const response = asRecord(await appServer.rpc('thread/list', params))
-    const data = Array.isArray(response?.data) ? response.data : []
-    scannedCount += data.length
-    for (const row of data) {
-      const doc = normalizeThreadSearchDocument(row)
-      if (!doc) continue
-      if (!options.useServerSearch && options.query && !isExactPhraseMatch(options.query, doc)) {
-        continue
-      }
-      docs.push(doc)
-      if (docs.length >= options.limit) {
-        return { docs, scannedCount }
-      }
-    }
-    cursor = typeof response?.nextCursor === 'string' && response.nextCursor.length > 0 ? response.nextCursor : null
-  } while (cursor)
-
-  return { docs, scannedCount }
-}
-
 export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
   const { appServer, methodCatalog } = getSharedBridgeState()
   void initializeSkillsSyncOnStartup(appServer)
@@ -1951,40 +1876,6 @@ export function createCodexBridgeMiddleware(): CodexBridgeMiddleware {
       if (req.method === 'GET' && url.pathname === '/codex-api/thread-titles') {
         const cache = await readMergedThreadTitleCache()
         setJson(res, 200, { data: cache })
-        return
-      }
-
-      if (req.method === 'POST' && url.pathname === '/codex-api/thread-search') {
-        const payload = asRecord(await readJsonBody(req))
-        const query = typeof payload?.query === 'string' ? payload.query.trim() : ''
-        const limitRaw = typeof payload?.limit === 'number' ? payload.limit : 200
-        const limit = Math.max(1, Math.min(1000, Math.floor(limitRaw)))
-        if (!query) {
-          setJson(res, 200, { data: { threadIds: [], indexedThreadCount: 0 } })
-          return
-        }
-
-        let searchResult: { docs: ThreadSearchDocument[]; scannedCount: number }
-        try {
-          searchResult = await loadThreadSearchDocuments(appServer, {
-            query,
-            limit,
-            useServerSearch: true,
-          })
-        } catch {
-          searchResult = await loadThreadSearchDocuments(appServer, {
-            query,
-            limit,
-            useServerSearch: false,
-          })
-        }
-
-        setJson(res, 200, {
-          data: {
-            threadIds: searchResult.docs.map((doc) => doc.id),
-            indexedThreadCount: searchResult.scannedCount,
-          },
-        })
         return
       }
 
