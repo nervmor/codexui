@@ -960,6 +960,26 @@
         "method": {
           "type": "string",
           "enum": [
+            "turn/moderationMetadata"
+          ],
+          "title": "Turn/moderationMetadataNotificationMethod"
+        },
+        "params": {
+          "$ref": "#/definitions/TurnModerationMetadataNotification"
+        }
+      },
+      "title": "Turn/moderationMetadataNotification"
+    },
+    {
+      "type": "object",
+      "required": [
+        "method",
+        "params"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
             "warning"
           ],
           "title": "WarningNotificationMethod"
@@ -1816,6 +1836,13 @@
           "type": "string",
           "enum": [
             "agentIdentity"
+          ]
+        },
+        {
+          "description": "Programmatic Codex auth backed by a personal access token.",
+          "type": "string",
+          "enum": [
+            "personalAccessToken"
           ]
         }
       ]
@@ -3524,6 +3551,12 @@
         },
         "status": {
           "$ref": "#/definitions/McpServerStartupState"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -4069,16 +4102,9 @@
       ]
     },
     "ReasoningEffort": {
-      "description": "See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning",
+      "description": "A non-empty reasoning effort value advertised by the model.",
       "type": "string",
-      "enum": [
-        "none",
-        "minimal",
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ]
+      "minLength": 1
     },
     "ReasoningSummary": {
       "description": "A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries",
@@ -6207,6 +6233,23 @@
           ]
         }
       ]
+    },
+    "TurnModerationMetadataNotification": {
+      "type": "object",
+      "required": [
+        "metadata",
+        "threadId",
+        "turnId"
+      ],
+      "properties": {
+        "metadata": true,
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      }
     },
     "TurnPlanStep": {
       "type": "object",

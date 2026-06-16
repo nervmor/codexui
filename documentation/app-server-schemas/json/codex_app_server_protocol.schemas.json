@@ -2115,6 +2115,30 @@
             "method": {
               "type": "string",
               "enum": [
+                "remoteControl/pairing/status"
+              ],
+              "title": "RemoteControl/pairing/statusRequestMethod"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/RemoteControlPairingStatusParams"
+            }
+          },
+          "title": "RemoteControl/pairing/statusRequest"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
                 "remoteControl/client/list"
               ],
               "title": "RemoteControl/client/listRequestMethod"
@@ -2483,6 +2507,29 @@
             }
           },
           "title": "Account/rateLimits/readRequest"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "method"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "account/usage/read"
+              ],
+              "title": "Account/usage/readRequestMethod"
+            },
+            "params": {
+              "type": "null"
+            }
+          },
+          "title": "Account/usage/readRequest"
         },
         {
           "type": "object",
@@ -5701,6 +5748,26 @@
             "method": {
               "type": "string",
               "enum": [
+                "turn/moderationMetadata"
+              ],
+              "title": "Turn/moderationMetadataNotificationMethod"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/TurnModerationMetadataNotification"
+            }
+          },
+          "title": "Turn/moderationMetadataNotification"
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "params"
+          ],
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
                 "warning"
               ],
               "title": "WarningNotificationMethod"
@@ -6287,13 +6354,13 @@
             ]
           },
           "runtimeWorkspaceRoots": {
-            "description": "Replace the thread's runtime workspace roots. Relative paths are resolved against the effective cwd for the thread.",
+            "description": "Replace the thread's runtime workspace roots. Paths must be absolute.",
             "type": [
               "array",
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/definitions/v2/AbsolutePathBuf"
             }
           },
           "sandbox": {
@@ -6340,6 +6407,30 @@
             ]
           }
         }
+      },
+      "AgentMessageInputContent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "encrypted_content",
+              "type"
+            ],
+            "properties": {
+              "encrypted_content": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "encrypted_content"
+                ],
+                "title": "EncryptedContentAgentMessageInputContentType"
+              }
+            },
+            "title": "EncryptedContentAgentMessageInputContent"
+          }
+        ]
       },
       "ContentItem": {
         "oneOf": [
@@ -6708,6 +6799,37 @@
               }
             },
             "title": "MessageResponseItem"
+          },
+          {
+            "type": "object",
+            "required": [
+              "author",
+              "content",
+              "recipient",
+              "type"
+            ],
+            "properties": {
+              "author": {
+                "type": "string"
+              },
+              "content": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/v2/AgentMessageInputContent"
+                }
+              },
+              "recipient": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "agent_message"
+                ],
+                "title": "AgentMessageResponseItemType"
+              }
+            },
+            "title": "AgentMessageResponseItem"
           },
           {
             "type": "object",
@@ -7436,13 +7558,13 @@
             ]
           },
           "runtimeWorkspaceRoots": {
-            "description": "Replace the thread's runtime workspace roots. Relative paths are resolved against the effective cwd for the thread.",
+            "description": "Replace the thread's runtime workspace roots. Paths must be absolute.",
             "type": [
               "array",
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/definitions/v2/AbsolutePathBuf"
             }
           },
           "sandbox": {
@@ -7557,13 +7679,13 @@
             ]
           },
           "runtimeWorkspaceRoots": {
-            "description": "Replace the thread's runtime workspace roots. Relative paths are resolved against the effective cwd for the thread.",
+            "description": "Replace the thread's runtime workspace roots. Paths must be absolute.",
             "type": [
               "array",
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/definitions/v2/AbsolutePathBuf"
             }
           },
           "sandbox": {
@@ -7826,16 +7948,9 @@
         ]
       },
       "ReasoningEffort": {
-        "description": "See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning",
+        "description": "A non-empty reasoning effort value advertised by the model.",
         "type": "string",
-        "enum": [
-          "none",
-          "minimal",
-          "low",
-          "medium",
-          "high",
-          "xhigh"
-        ]
+        "minLength": 1
       },
       "ReasoningSummary": {
         "description": "A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries",
@@ -9531,7 +9646,7 @@
             ]
           },
           "environments": {
-            "description": "Optional turn-scoped environments.\n\nOmitted uses the thread sticky environments. Empty disables environment access for this turn. Non-empty selects the first environment as the current turn environment for this turn.",
+            "description": "Optional environments for this turn and subsequent turns.\n\nOmitted uses the thread sticky environments. Empty disables environment access for this turn. Non-empty selects the first environment as the current turn environment for this turn.",
             "type": [
               "array",
               "null"
@@ -9585,13 +9700,13 @@
             }
           },
           "runtimeWorkspaceRoots": {
-            "description": "Replace the thread's runtime workspace roots for this turn and subsequent turns. Relative paths are resolved against the effective cwd for the turn.",
+            "description": "Replace the thread's runtime workspace roots for this turn and subsequent turns. Paths must be absolute.",
             "type": [
               "array",
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/definitions/v2/AbsolutePathBuf"
             }
           },
           "sandboxPolicy": {
@@ -10164,6 +10279,25 @@
         "properties": {
           "manualCode": {
             "type": "boolean"
+          }
+        }
+      },
+      "RemoteControlPairingStatusParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "RemoteControlPairingStatusParams",
+        "type": "object",
+        "properties": {
+          "manualPairingCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pairingCode": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -14915,9 +15049,73 @@
           }
         }
       },
+      "AppTemplateSummary": {
+        "type": "object",
+        "required": [
+          "materializedAppIds",
+          "name",
+          "templateId"
+        ],
+        "properties": {
+          "canonicalConnectorId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logoUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logoUrlDark": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "materializedAppIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/AppTemplateUnavailableReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "templateId": {
+            "type": "string"
+          }
+        }
+      },
+      "AppTemplateUnavailableReason": {
+        "type": "string",
+        "enum": [
+          "NOT_CONFIGURED_FOR_WORKSPACE",
+          "NO_ACTIVE_WORKSPACE"
+        ]
+      },
       "PluginDetail": {
         "type": "object",
         "required": [
+          "appTemplates",
           "apps",
           "hooks",
           "marketplaceName",
@@ -14926,6 +15124,12 @@
           "summary"
         ],
         "properties": {
+          "appTemplates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/v2/AppTemplateSummary"
+            }
+          },
           "apps": {
             "type": "array",
             "items": {
@@ -16288,6 +16492,19 @@
           }
         }
       },
+      "RemoteControlPairingStatusResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "RemoteControlPairingStatusResponse",
+        "type": "object",
+        "required": [
+          "claimed"
+        ],
+        "properties": {
+          "claimed": {
+            "type": "boolean"
+          }
+        }
+      },
       "RemoteControlClient": {
         "type": "object",
         "required": [
@@ -17150,6 +17367,84 @@
             "additionalProperties": {
               "$ref": "#/definitions/v2/RateLimitSnapshot"
             }
+          }
+        }
+      },
+      "AccountTokenUsageDailyBucket": {
+        "type": "object",
+        "required": [
+          "startDate",
+          "tokens"
+        ],
+        "properties": {
+          "startDate": {
+            "type": "string"
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AccountTokenUsageSummary": {
+        "type": "object",
+        "properties": {
+          "currentStreakDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "lifetimeTokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "longestRunningTurnSec": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "longestStreakDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "peakDailyTokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "GetAccountTokenUsageResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "GetAccountTokenUsageResponse",
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "properties": {
+          "dailyUsageBuckets": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/definitions/v2/AccountTokenUsageDailyBucket"
+            }
+          },
+          "summary": {
+            "$ref": "#/definitions/v2/AccountTokenUsageSummary"
           }
         }
       },
@@ -18150,13 +18445,13 @@
               "$ref": "#/definitions/v2/ApprovalsReviewer"
             }
           },
-          "allowedPermissions": {
+          "allowedPermissionProfiles": {
             "type": [
-              "array",
+              "object",
               "null"
             ],
-            "items": {
-              "type": "string"
+            "additionalProperties": {
+              "type": "boolean"
             }
           },
           "allowedSandboxModes": {
@@ -18194,6 +18489,12 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "defaultPermissions": {
+            "type": [
+              "string",
+              "null"
             ]
           },
           "enforceResidency": {
@@ -20414,6 +20715,12 @@
           },
           "status": {
             "$ref": "#/definitions/v2/McpServerStartupState"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -20446,6 +20753,13 @@
             "type": "string",
             "enum": [
               "agentIdentity"
+            ]
+          },
+          {
+            "description": "Programmatic Codex auth backed by a personal access token.",
+            "type": "string",
+            "enum": [
+              "personalAccessToken"
             ]
           }
         ]
@@ -20730,6 +21044,25 @@
             "items": {
               "$ref": "#/definitions/v2/ModelVerification"
             }
+          }
+        }
+      },
+      "TurnModerationMetadataNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "TurnModerationMetadataNotification",
+        "type": "object",
+        "required": [
+          "metadata",
+          "threadId",
+          "turnId"
+        ],
+        "properties": {
+          "metadata": true,
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
           }
         }
       },

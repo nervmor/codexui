@@ -115,13 +115,13 @@
       ]
     },
     "runtimeWorkspaceRoots": {
-      "description": "Replace the thread's runtime workspace roots. Relative paths are resolved against the effective cwd for the thread.",
+      "description": "Replace the thread's runtime workspace roots. Paths must be absolute.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/AbsolutePathBuf"
       }
     },
     "sandbox": {

@@ -119,13 +119,13 @@
             "$ref": "#/definitions/ApprovalsReviewer"
           }
         },
-        "allowedPermissions": {
+        "allowedPermissionProfiles": {
           "type": [
-            "array",
+            "object",
             "null"
           ],
-          "items": {
-            "type": "string"
+          "additionalProperties": {
+            "type": "boolean"
           }
         },
         "allowedSandboxModes": {
@@ -163,6 +163,12 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "defaultPermissions": {
+          "type": [
+            "string",
+            "null"
           ]
         },
         "enforceResidency": {
