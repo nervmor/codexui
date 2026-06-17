@@ -138,6 +138,30 @@
         "method": {
           "type": "string",
           "enum": [
+            "thread/delete"
+          ],
+          "title": "Thread/deleteRequestMethod"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadDeleteParams"
+        }
+      },
+      "title": "Thread/deleteRequest"
+    },
+    {
+      "type": "object",
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
             "thread/unsubscribe"
           ],
           "title": "Thread/unsubscribeRequestMethod"
@@ -508,6 +532,54 @@
         }
       },
       "title": "Thread/backgroundTerminals/cleanRequest"
+    },
+    {
+      "type": "object",
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "thread/backgroundTerminals/list"
+          ],
+          "title": "Thread/backgroundTerminals/listRequestMethod"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadBackgroundTerminalsListParams"
+        }
+      },
+      "title": "Thread/backgroundTerminals/listRequest"
+    },
+    {
+      "type": "object",
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "thread/backgroundTerminals/terminate"
+          ],
+          "title": "Thread/backgroundTerminals/terminateRequestMethod"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadBackgroundTerminalsTerminateParams"
+        }
+      },
+      "title": "Thread/backgroundTerminals/terminateRequest"
     },
     {
       "type": "object",
@@ -1728,7 +1800,14 @@
           "title": "RemoteControl/enableRequestMethod"
         },
         "params": {
-          "type": "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RemoteControlEnableParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "title": "RemoteControl/enableRequest"
@@ -1751,7 +1830,14 @@
           "title": "RemoteControl/disableRequestMethod"
         },
         "params": {
-          "type": "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RemoteControlDisableParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "title": "RemoteControl/disableRequest"
@@ -2784,6 +2870,26 @@
         {
           "type": "object",
           "required": [
+            "text",
+            "type"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "input_text"
+              ],
+              "title": "InputTextAgentMessageInputContentType"
+            }
+          },
+          "title": "InputTextAgentMessageInputContent"
+        },
+        {
+          "type": "object",
+          "required": [
             "encrypted_content",
             "type"
           ],
@@ -2924,6 +3030,36 @@
           "type": "string"
         }
       }
+    },
+    "CapabilityRootLocation": {
+      "description": "Location used to resolve a selected capability root.",
+      "oneOf": [
+        {
+          "description": "A path owned by an execution environment.",
+          "type": "object",
+          "required": [
+            "environmentId",
+            "path",
+            "type"
+          ],
+          "properties": {
+            "environmentId": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "environment"
+              ],
+              "title": "EnvironmentCapabilityRootLocationType"
+            }
+          },
+          "title": "EnvironmentCapabilityRootLocation"
+        }
+      ]
     },
     "ClientInfo": {
       "type": "object",
@@ -3332,6 +3468,13 @@
           },
           "title": "OutputTextContentItem"
         }
+      ]
+    },
+    "ConversationTextRole": {
+      "type": "string",
+      "enum": [
+        "user",
+        "developer"
       ]
     },
     "DynamicToolSpec": {
@@ -4932,6 +5075,20 @@
         }
       }
     },
+    "RealtimeConversationArchitecture": {
+      "type": "string",
+      "enum": [
+        "realtimeapi",
+        "avas"
+      ]
+    },
+    "RealtimeConversationVersion": {
+      "type": "string",
+      "enum": [
+        "v1",
+        "v2"
+      ]
+    },
     "RealtimeOutputModality": {
       "type": "string",
       "enum": [
@@ -5110,6 +5267,22 @@
         },
         "environmentId": {
           "type": "string"
+        }
+      }
+    },
+    "RemoteControlDisableParams": {
+      "type": "object",
+      "properties": {
+        "ephemeral": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RemoteControlEnableParams": {
+      "type": "object",
+      "properties": {
+        "ephemeral": {
+          "type": "boolean"
         }
       }
     },
@@ -5998,6 +6171,28 @@
         }
       ]
     },
+    "SelectedCapabilityRoot": {
+      "description": "A user-selected root that can expose one or more runtime capabilities.",
+      "type": "object",
+      "required": [
+        "id",
+        "location"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable identifier supplied by the capability selection platform.",
+          "type": "string"
+        },
+        "location": {
+          "description": "Where the selected root can be resolved.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CapabilityRootLocation"
+            }
+          ]
+        }
+      }
+    },
     "SendAddCreditsNudgeEmailParams": {
       "type": "object",
       "required": [
@@ -6195,6 +6390,48 @@
         }
       }
     },
+    "ThreadBackgroundTerminalsListParams": {
+      "type": "object",
+      "required": [
+        "threadId"
+      ],
+      "properties": {
+        "cursor": {
+          "description": "Opaque pagination cursor returned by a previous call.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "Optional page size.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "threadId": {
+          "type": "string"
+        }
+      }
+    },
+    "ThreadBackgroundTerminalsTerminateParams": {
+      "type": "object",
+      "required": [
+        "processId",
+        "threadId"
+      ],
+      "properties": {
+        "processId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      }
+    },
     "ThreadCompactStartParams": {
       "type": "object",
       "required": [
@@ -6215,6 +6452,17 @@
       "properties": {
         "threadId": {
           "description": "Thread whose out-of-band elicitation counter should be decremented.",
+          "type": "string"
+        }
+      }
+    },
+    "ThreadDeleteParams": {
+      "type": "object",
+      "required": [
+        "threadId"
+      ],
+      "properties": {
+        "threadId": {
           "type": "string"
         }
       }
@@ -6681,6 +6929,14 @@
         "threadId"
       ],
       "properties": {
+        "role": {
+          "default": "user",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ConversationTextRole"
+            }
+          ]
+        },
         "text": {
           "type": "string"
         },
@@ -6739,6 +6995,24 @@
         "threadId"
       ],
       "properties": {
+        "architecture": {
+          "description": "Overrides the configured realtime architecture for this session only.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RealtimeConversationArchitecture"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "description": "Overrides the configured realtime model for this session only.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "outputModality": {
           "description": "Selects text or audio output for the realtime session. Transport and voice stay independent so clients can choose how they connect separately from what the model emits.",
           "allOf": [
@@ -6766,6 +7040,17 @@
           "anyOf": [
             {
               "$ref": "#/definitions/ThreadRealtimeStartTransport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Overrides the configured realtime protocol version for this session only.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RealtimeConversationVersion"
             },
             {
               "type": "null"
@@ -7261,12 +7546,7 @@
       ]
     },
     "ThreadSource": {
-      "type": "string",
-      "enum": [
-        "user",
-        "subagent",
-        "memory_consolidation"
-      ]
+      "type": "string"
     },
     "ThreadSourceKind": {
       "type": "string",
@@ -7416,6 +7696,16 @@
               "type": "null"
             }
           ]
+        },
+        "selectedCapabilityRoots": {
+          "description": "Capability roots selected for this thread by the hosting platform.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/SelectedCapabilityRoot"
+          }
         },
         "serviceName": {
           "type": [
@@ -7746,7 +8036,7 @@
           ]
         },
         "responsesapiClientMetadata": {
-          "description": "Optional turn-scoped Responses API client metadata.",
+          "description": "Optional metadata to enrich Codex's ResponsesAPI turn metadata.\n\nEntries are flattened into the JSON string sent as `client_metadata[\"x-codex-turn-metadata\"]` on ResponsesAPI HTTP and websocket requests.\n\nThey are not sent as top-level ResponsesAPI `client_metadata` keys, and reserved keys such as `session_id`, `thread_id`, `turn_id`, and `window_id` cannot be overridden.",
           "type": [
             "object",
             "null"
@@ -7834,7 +8124,7 @@
           }
         },
         "responsesapiClientMetadata": {
-          "description": "Optional turn-scoped Responses API client metadata.",
+          "description": "Optional metadata to enrich Codex's ResponsesAPI turn metadata.\n\nEntries are flattened into the JSON string sent as `client_metadata[\"x-codex-turn-metadata\"]` on ResponsesAPI HTTP and websocket requests.\n\nThey are not sent as top-level ResponsesAPI `client_metadata` keys, and reserved keys such as `session_id`, `thread_id`, `turn_id`, and `window_id` cannot be overridden.",
           "type": [
             "object",
             "null"

@@ -436,6 +436,30 @@
             "method": {
               "type": "string",
               "enum": [
+                "thread/delete"
+              ],
+              "title": "Thread/deleteRequestMethod"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadDeleteParams"
+            }
+          },
+          "title": "Thread/deleteRequest"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
                 "thread/unsubscribe"
               ],
               "title": "Thread/unsubscribeRequestMethod"
@@ -806,6 +830,54 @@
             }
           },
           "title": "Thread/backgroundTerminals/cleanRequest"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "thread/backgroundTerminals/list"
+              ],
+              "title": "Thread/backgroundTerminals/listRequestMethod"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadBackgroundTerminalsListParams"
+            }
+          },
+          "title": "Thread/backgroundTerminals/listRequest"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "thread/backgroundTerminals/terminate"
+              ],
+              "title": "Thread/backgroundTerminals/terminateRequestMethod"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadBackgroundTerminalsTerminateParams"
+            }
+          },
+          "title": "Thread/backgroundTerminals/terminateRequest"
         },
         {
           "type": "object",
@@ -2026,7 +2098,14 @@
               "title": "RemoteControl/enableRequestMethod"
             },
             "params": {
-              "type": "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/v2/RemoteControlEnableParams"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "title": "RemoteControl/enableRequest"
@@ -2049,7 +2128,14 @@
               "title": "RemoteControl/disableRequestMethod"
             },
             "params": {
-              "type": "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/v2/RemoteControlDisableParams"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "title": "RemoteControl/disableRequest"
@@ -4369,6 +4455,15 @@
         "turnId"
       ],
       "properties": {
+        "autoResolutionMs": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
         "itemId": {
           "type": "string"
         },
@@ -4871,6 +4966,26 @@
             }
           },
           "title": "Thread/archivedNotification"
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "params"
+          ],
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "thread/deleted"
+              ],
+              "title": "Thread/deletedNotificationMethod"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadDeletedNotification"
+            }
+          },
+          "title": "Thread/deletedNotification"
         },
         {
           "type": "object",
@@ -6165,6 +6280,36 @@
           }
         ]
       },
+      "CapabilityRootLocation": {
+        "description": "Location used to resolve a selected capability root.",
+        "oneOf": [
+          {
+            "description": "A path owned by an execution environment.",
+            "type": "object",
+            "required": [
+              "environmentId",
+              "path",
+              "type"
+            ],
+            "properties": {
+              "environmentId": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "environment"
+                ],
+                "title": "EnvironmentCapabilityRootLocationType"
+              }
+            },
+            "title": "EnvironmentCapabilityRootLocation"
+          }
+        ]
+      },
       "DynamicToolSpec": {
         "type": "object",
         "required": [
@@ -6207,13 +6352,30 @@
           "danger-full-access"
         ]
       },
+      "SelectedCapabilityRoot": {
+        "description": "A user-selected root that can expose one or more runtime capabilities.",
+        "type": "object",
+        "required": [
+          "id",
+          "location"
+        ],
+        "properties": {
+          "id": {
+            "description": "Stable identifier supplied by the capability selection platform.",
+            "type": "string"
+          },
+          "location": {
+            "description": "Where the selected root can be resolved.",
+            "allOf": [
+              {
+                "$ref": "#/definitions/v2/CapabilityRootLocation"
+              }
+            ]
+          }
+        }
+      },
       "ThreadSource": {
-        "type": "string",
-        "enum": [
-          "user",
-          "subagent",
-          "memory_consolidation"
-        ]
+        "type": "string"
       },
       "ThreadStartSource": {
         "type": "string",
@@ -6373,6 +6535,16 @@
               }
             ]
           },
+          "selectedCapabilityRoots": {
+            "description": "Capability roots selected for this thread by the hosting platform.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/definitions/v2/SelectedCapabilityRoot"
+            }
+          },
           "serviceName": {
             "type": [
               "string",
@@ -6410,6 +6582,26 @@
       },
       "AgentMessageInputContent": {
         "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "input_text"
+                ],
+                "title": "InputTextAgentMessageInputContentType"
+              }
+            },
+            "title": "InputTextAgentMessageInputContent"
+          },
           {
             "type": "object",
             "required": [
@@ -7733,6 +7925,19 @@
           }
         }
       },
+      "ThreadDeleteParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ThreadDeleteParams",
+        "type": "object",
+        "required": [
+          "threadId"
+        ],
+        "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        }
+      },
       "ThreadUnsubscribeParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "ThreadUnsubscribeParams",
@@ -8310,6 +8515,52 @@
           "threadId"
         ],
         "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        }
+      },
+      "ThreadBackgroundTerminalsListParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ThreadBackgroundTerminalsListParams",
+        "type": "object",
+        "required": [
+          "threadId"
+        ],
+        "properties": {
+          "cursor": {
+            "description": "Opaque pagination cursor returned by a previous call.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "description": "Optional page size.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "threadId": {
+            "type": "string"
+          }
+        }
+      },
+      "ThreadBackgroundTerminalsTerminateParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ThreadBackgroundTerminalsTerminateParams",
+        "type": "object",
+        "required": [
+          "processId",
+          "threadId"
+        ],
+        "properties": {
+          "processId": {
+            "type": "string"
+          },
           "threadId": {
             "type": "string"
           }
@@ -9690,7 +9941,7 @@
             ]
           },
           "responsesapiClientMetadata": {
-            "description": "Optional turn-scoped Responses API client metadata.",
+            "description": "Optional metadata to enrich Codex's ResponsesAPI turn metadata.\n\nEntries are flattened into the JSON string sent as `client_metadata[\"x-codex-turn-metadata\"]` on ResponsesAPI HTTP and websocket requests.\n\nThey are not sent as top-level ResponsesAPI `client_metadata` keys, and reserved keys such as `session_id`, `thread_id`, `turn_id`, and `window_id` cannot be overridden.",
             "type": [
               "object",
               "null"
@@ -9780,7 +10031,7 @@
             }
           },
           "responsesapiClientMetadata": {
-            "description": "Optional turn-scoped Responses API client metadata.",
+            "description": "Optional metadata to enrich Codex's ResponsesAPI turn metadata.\n\nEntries are flattened into the JSON string sent as `client_metadata[\"x-codex-turn-metadata\"]` on ResponsesAPI HTTP and websocket requests.\n\nThey are not sent as top-level ResponsesAPI `client_metadata` keys, and reserved keys such as `session_id`, `thread_id`, `turn_id`, and `window_id` cannot be overridden.",
             "type": [
               "object",
               "null"
@@ -9810,6 +10061,20 @@
             "type": "string"
           }
         }
+      },
+      "RealtimeConversationArchitecture": {
+        "type": "string",
+        "enum": [
+          "realtimeapi",
+          "avas"
+        ]
+      },
+      "RealtimeConversationVersion": {
+        "type": "string",
+        "enum": [
+          "v1",
+          "v2"
+        ]
       },
       "RealtimeOutputModality": {
         "type": "string",
@@ -9894,6 +10159,24 @@
           "threadId"
         ],
         "properties": {
+          "architecture": {
+            "description": "Overrides the configured realtime architecture for this session only.",
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/RealtimeConversationArchitecture"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "description": "Overrides the configured realtime model for this session only.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "outputModality": {
             "description": "Selects text or audio output for the realtime session. Transport and voice stay independent so clients can choose how they connect separately from what the model emits.",
             "allOf": [
@@ -9921,6 +10204,17 @@
             "anyOf": [
               {
                 "$ref": "#/definitions/v2/ThreadRealtimeStartTransport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "description": "Overrides the configured realtime protocol version for this session only.",
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/RealtimeConversationVersion"
               },
               {
                 "type": "null"
@@ -9995,6 +10289,13 @@
           }
         }
       },
+      "ConversationTextRole": {
+        "type": "string",
+        "enum": [
+          "user",
+          "developer"
+        ]
+      },
       "ThreadRealtimeAppendTextParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "ThreadRealtimeAppendTextParams",
@@ -10005,6 +10306,14 @@
           "threadId"
         ],
         "properties": {
+          "role": {
+            "default": "user",
+            "allOf": [
+              {
+                "$ref": "#/definitions/v2/ConversationTextRole"
+              }
+            ]
+          },
           "text": {
             "type": "string"
           },
@@ -10271,6 +10580,46 @@
             }
           }
         }
+      },
+      "RemoteControlEnableParams": {
+        "type": "object",
+        "properties": {
+          "ephemeral": {
+            "type": "boolean"
+          }
+        }
+      },
+      "NullableRemoteControlEnableParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Nullable_RemoteControlEnableParams",
+        "anyOf": [
+          {
+            "$ref": "#/definitions/v2/RemoteControlEnableParams"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "RemoteControlDisableParams": {
+        "type": "object",
+        "properties": {
+          "ephemeral": {
+            "type": "boolean"
+          }
+        }
+      },
+      "NullableRemoteControlDisableParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Nullable_RemoteControlDisableParams",
+        "anyOf": [
+          {
+            "$ref": "#/definitions/v2/RemoteControlDisableParams"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "RemoteControlPairingStartParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -12064,6 +12413,14 @@
           }
         ]
       },
+      "SubAgentActivityKind": {
+        "type": "string",
+        "enum": [
+          "started",
+          "interacted",
+          "interrupted"
+        ]
+      },
       "SubAgentSource": {
         "oneOf": [
           {
@@ -12796,6 +13153,38 @@
               }
             },
             "title": "CollabAgentToolCallThreadItem"
+          },
+          {
+            "type": "object",
+            "required": [
+              "agentPath",
+              "agentThreadId",
+              "id",
+              "kind",
+              "type"
+            ],
+            "properties": {
+              "agentPath": {
+                "type": "string"
+              },
+              "agentThreadId": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/definitions/v2/SubAgentActivityKind"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "subAgentActivity"
+                ],
+                "title": "SubAgentActivityThreadItemType"
+              }
+            },
+            "title": "SubAgentActivityThreadItem"
           },
           {
             "type": "object",
@@ -13565,6 +13954,11 @@
         "title": "ThreadArchiveResponse",
         "type": "object"
       },
+      "ThreadDeleteResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ThreadDeleteResponse",
+        "type": "object"
+      },
       "ThreadUnsubscribeStatus": {
         "type": "string",
         "enum": [
@@ -13784,6 +14178,88 @@
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "ThreadBackgroundTerminalsCleanResponse",
         "type": "object"
+      },
+      "ThreadBackgroundTerminal": {
+        "type": "object",
+        "required": [
+          "command",
+          "cwd",
+          "itemId",
+          "processId"
+        ],
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "cpuPercent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "cwd": {
+            "$ref": "#/definitions/v2/AbsolutePathBuf"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "osPid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "processId": {
+            "type": "string"
+          },
+          "rssKb": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      "ThreadBackgroundTerminalsListResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ThreadBackgroundTerminalsListResponse",
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/v2/ThreadBackgroundTerminal"
+            }
+          },
+          "nextCursor": {
+            "description": "Opaque cursor to pass to the next call to continue after the last item. If None, there are no more items to return.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ThreadBackgroundTerminalsTerminateResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ThreadBackgroundTerminalsTerminateResponse",
+        "type": "object",
+        "required": [
+          "terminated"
+        ],
+        "properties": {
+          "terminated": {
+            "type": "boolean"
+          }
+        }
       },
       "ThreadRollbackResponse": {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -15022,10 +15498,15 @@
         "type": "object",
         "required": [
           "id",
-          "name",
-          "needsAuth"
+          "name"
         ],
         "properties": {
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "description": {
             "type": [
               "string",
@@ -15043,9 +15524,6 @@
           },
           "name": {
             "type": "string"
-          },
-          "needsAuth": {
-            "type": "boolean"
           }
         }
       },
@@ -15058,6 +15536,12 @@
         ],
         "properties": {
           "canonicalConnectorId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
             "type": [
               "string",
               "null"
@@ -15166,6 +15650,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "shareUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "skills": {
             "type": "array",
@@ -17669,6 +18159,16 @@
       "AppsDefaultConfig": {
         "type": "object",
         "properties": {
+          "approvals_reviewer": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ApprovalsReviewer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "destructive_enabled": {
             "default": true,
             "type": "boolean"
@@ -18427,6 +18927,12 @@
               "null"
             ]
           },
+          "allowRemoteControl": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "allowedApprovalPolicies": {
             "type": [
               "array",
@@ -19014,6 +19520,19 @@
       "ThreadArchivedNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "ThreadArchivedNotification",
+        "type": "object",
+        "required": [
+          "threadId"
+        ],
+        "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        }
+      },
+      "ThreadDeletedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ThreadDeletedNotification",
         "type": "object",
         "required": [
           "threadId"
@@ -20761,6 +21280,13 @@
             "enum": [
               "personalAccessToken"
             ]
+          },
+          {
+            "description": "Amazon Bedrock bearer token managed by Codex.",
+            "type": "string",
+            "enum": [
+              "bedrockApiKey"
+            ]
           }
         ]
       },
@@ -21201,13 +21727,6 @@
             "type": "string"
           }
         }
-      },
-      "RealtimeConversationVersion": {
-        "type": "string",
-        "enum": [
-          "v1",
-          "v2"
-        ]
       },
       "ThreadRealtimeStartedNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",

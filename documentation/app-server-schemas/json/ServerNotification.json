@@ -94,6 +94,26 @@
         "method": {
           "type": "string",
           "enum": [
+            "thread/deleted"
+          ],
+          "title": "Thread/deletedNotificationMethod"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadDeletedNotification"
+        }
+      },
+      "title": "Thread/deletedNotification"
+    },
+    {
+      "type": "object",
+      "required": [
+        "method",
+        "params"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
             "thread/unarchived"
           ],
           "title": "Thread/unarchivedNotificationMethod"
@@ -1843,6 +1863,13 @@
           "type": "string",
           "enum": [
             "personalAccessToken"
+          ]
+        },
+        {
+          "description": "Amazon Bedrock bearer token managed by Codex.",
+          "type": "string",
+          "enum": [
+            "bedrockApiKey"
           ]
         }
       ]
@@ -4489,6 +4516,14 @@
         }
       }
     },
+    "SubAgentActivityKind": {
+      "type": "string",
+      "enum": [
+        "started",
+        "interacted",
+        "interrupted"
+      ]
+    },
     "SubAgentSource": {
       "oneOf": [
         {
@@ -4817,6 +4852,17 @@
       }
     },
     "ThreadClosedNotification": {
+      "type": "object",
+      "required": [
+        "threadId"
+      ],
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      }
+    },
+    "ThreadDeletedNotification": {
       "type": "object",
       "required": [
         "threadId"
@@ -5422,6 +5468,38 @@
         {
           "type": "object",
           "required": [
+            "agentPath",
+            "agentThreadId",
+            "id",
+            "kind",
+            "type"
+          ],
+          "properties": {
+            "agentPath": {
+              "type": "string"
+            },
+            "agentThreadId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/SubAgentActivityKind"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "subAgentActivity"
+              ],
+              "title": "SubAgentActivityThreadItemType"
+            }
+          },
+          "title": "SubAgentActivityThreadItem"
+        },
+        {
+          "type": "object",
+          "required": [
             "id",
             "query",
             "type"
@@ -5887,12 +5965,7 @@
       }
     },
     "ThreadSource": {
-      "type": "string",
-      "enum": [
-        "user",
-        "subagent",
-        "memory_consolidation"
-      ]
+      "type": "string"
     },
     "ThreadStartedNotification": {
       "type": "object",

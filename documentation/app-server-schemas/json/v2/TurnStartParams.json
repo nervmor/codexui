@@ -119,7 +119,7 @@
       ]
     },
     "responsesapiClientMetadata": {
-      "description": "Optional turn-scoped Responses API client metadata.",
+      "description": "Optional metadata to enrich Codex's ResponsesAPI turn metadata.\n\nEntries are flattened into the JSON string sent as `client_metadata[\"x-codex-turn-metadata\"]` on ResponsesAPI HTTP and websocket requests.\n\nThey are not sent as top-level ResponsesAPI `client_metadata` keys, and reserved keys such as `session_id`, `thread_id`, `turn_id`, and `window_id` cannot be overridden.",
       "type": [
         "object",
         "null"

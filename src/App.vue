@@ -84,7 +84,7 @@
             :project-git-error-by-id="projectGitErrorById"
             :project-git-action-by-id="projectGitActionById"
             @select="onSelectThread"
-            @archive="onArchiveThread" @start-new-thread="onStartNewThread" @rename-project="onRenameProject"
+            @archive="onArchiveThread" @delete="onDeleteThread" @start-new-thread="onStartNewThread" @rename-project="onRenameProject"
             @browse-project-files="onBrowseProjectFiles"
             @open-project-git-menu="onOpenProjectGitMenu"
             @switch-project-branch="onSwitchProjectBranch"
@@ -453,6 +453,7 @@ const {
   ensureThreadMessagesLoaded,
   setThreadScrollState,
   archiveThreadById,
+  deleteThreadById,
   renameThreadById,
   forkThreadFromTurn,
   sendMessageToSelectedThread,
@@ -1049,6 +1050,10 @@ async function onRemoveAccount(accountId: string): Promise<void> {
 
 function onArchiveThread(threadId: string): void {
   void archiveThreadById(threadId)
+}
+
+function onDeleteThread(threadId: string): void {
+  void deleteThreadById(threadId)
 }
 
 function onStartNewThread(projectName: string): void {

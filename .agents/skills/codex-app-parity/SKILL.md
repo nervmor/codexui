@@ -610,3 +610,10 @@ If a finding conflicts with current official docs or current official code, trea
   - `/goal pause`, `/goal resume`, and `/goal clear` control it.
 - The docs describe the objective as a durable/persistent target for long-running work, and do not expose a first-class token budget input in the app-facing workflow.
 - For CodexUI parity, the composer `Goal` control should behave like a lightweight mode label next to `Plan`: selecting it marks the next submitted composer text as the goal objective without visibly inserting `/goal` into the input. Manual `/goal ...` commands remain a compatible fallback, but the visible app-style interaction should stay tag-based and should not present an Objective/Token budget/Set Goal form.
+
+## Findings: App-Server 0.140.0 Thread Lifecycle (2026-06-17)
+
+- Codex CLI `0.140.0` keeps the app-server schema namespace at `v2` and adds first-class hard delete support: `thread/delete` plus `thread/deleted`.
+- Official app-server docs distinguish archive from delete: `thread/archive` moves rollout files into archived sessions, while `thread/delete` hard-deletes active or archived threads and spawned descendants.
+- CodexUI sidebar actions labeled `Delete thread` should call `thread/delete`, not `thread/archive`; archive behavior should only be used for explicitly labeled archive UI.
+- `0.140.0` also adds experimental background-terminal inspection/control methods: `thread/backgroundTerminals/list` and `thread/backgroundTerminals/terminate`, complementing the existing `thread/backgroundTerminals/clean`.

@@ -156,6 +156,26 @@
         {
           "type": "object",
           "required": [
+            "text",
+            "type"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "input_text"
+              ],
+              "title": "InputTextAgentMessageInputContentType"
+            }
+          },
+          "title": "InputTextAgentMessageInputContent"
+        },
+        {
+          "type": "object",
+          "required": [
             "encrypted_content",
             "type"
           ],

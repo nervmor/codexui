@@ -8,6 +8,24 @@
     "threadId"
   ],
   "properties": {
+    "architecture": {
+      "description": "Overrides the configured realtime architecture for this session only.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RealtimeConversationArchitecture"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model": {
+      "description": "Overrides the configured realtime model for this session only.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "outputModality": {
       "description": "Selects text or audio output for the realtime session. Transport and voice stay independent so clients can choose how they connect separately from what the model emits.",
       "allOf": [
@@ -41,6 +59,17 @@
         }
       ]
     },
+    "version": {
+      "description": "Overrides the configured realtime protocol version for this session only.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RealtimeConversationVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "voice": {
       "anyOf": [
         {
@@ -53,6 +82,20 @@
     }
   },
   "definitions": {
+    "RealtimeConversationArchitecture": {
+      "type": "string",
+      "enum": [
+        "realtimeapi",
+        "avas"
+      ]
+    },
+    "RealtimeConversationVersion": {
+      "type": "string",
+      "enum": [
+        "v1",
+        "v2"
+      ]
+    },
     "RealtimeOutputModality": {
       "type": "string",
       "enum": [

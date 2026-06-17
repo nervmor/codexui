@@ -20,10 +20,15 @@
       "type": "object",
       "required": [
         "id",
-        "name",
-        "needsAuth"
+        "name"
       ],
       "properties": {
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "description": {
           "type": [
             "string",
@@ -41,9 +46,6 @@
         },
         "name": {
           "type": "string"
-        },
-        "needsAuth": {
-          "type": "boolean"
         }
       }
     },
@@ -56,6 +58,12 @@
       ],
       "properties": {
         "canonicalConnectorId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "category": {
           "type": [
             "string",
             "null"
@@ -203,6 +211,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "shareUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "skills": {
           "type": "array",

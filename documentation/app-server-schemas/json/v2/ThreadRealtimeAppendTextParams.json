@@ -8,11 +8,28 @@
     "threadId"
   ],
   "properties": {
+    "role": {
+      "default": "user",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ConversationTextRole"
+        }
+      ]
+    },
     "text": {
       "type": "string"
     },
     "threadId": {
       "type": "string"
+    }
+  },
+  "definitions": {
+    "ConversationTextRole": {
+      "type": "string",
+      "enum": [
+        "user",
+        "developer"
+      ]
     }
   }
 }

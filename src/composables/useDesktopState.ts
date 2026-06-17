@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import {
   archiveThread,
+  deleteThread,
   clearThreadGoal as clearThreadGoalRpc,
   forkThread as forkThreadRpc,
   getAvailableCollaborationModes,
@@ -3345,6 +3346,34 @@ export function useDesktopState() {
     }
   }
 
+  function clearLocalThreadState(threadId: string): void {
+    threadTitleById.value = omitKey(threadTitleById.value, threadId)
+    persistedMessagesByThreadId.value = omitKey(persistedMessagesByThreadId.value, threadId)
+    livePlanMessagesByThreadId.value = omitKey(livePlanMessagesByThreadId.value, threadId)
+    liveAgentMessagesByThreadId.value = omitKey(liveAgentMessagesByThreadId.value, threadId)
+    liveReasoningTextByThreadId.value = omitKey(liveReasoningTextByThreadId.value, threadId)
+    liveCommandsByThreadId.value = omitKey(liveCommandsByThreadId.value, threadId)
+    liveFileChangeMessagesByThreadId.value = omitKey(liveFileChangeMessagesByThreadId.value, threadId)
+    readStateByThreadId.value = omitKey(readStateByThreadId.value, threadId)
+    scrollStateByThreadId.value = omitKey(scrollStateByThreadId.value, threadId)
+    loadedVersionByThreadId.value = omitKey(loadedVersionByThreadId.value, threadId)
+    loadedMessagesByThreadId.value = omitKey(loadedMessagesByThreadId.value, threadId)
+    turnIndexByTurnIdByThreadId.value = omitKey(turnIndexByTurnIdByThreadId.value, threadId)
+    turnSummaryByThreadId.value = omitKey(turnSummaryByThreadId.value, threadId)
+    turnActivityByThreadId.value = omitKey(turnActivityByThreadId.value, threadId)
+    turnErrorByThreadId.value = omitKey(turnErrorByThreadId.value, threadId)
+    activeTurnIdByThreadId.value = omitKey(activeTurnIdByThreadId.value, threadId)
+    pendingServerRequestsByThreadId.value = omitKey(pendingServerRequestsByThreadId.value, threadId)
+    pendingTurnRequestByThreadId.value = omitKey(pendingTurnRequestByThreadId.value, threadId)
+    threadTokenUsageByThreadId.value = omitKey(threadTokenUsageByThreadId.value, threadId)
+    threadGoalByThreadId.value = omitKey(threadGoalByThreadId.value, threadId)
+    threadGoalActionPendingByThreadId.value = omitKey(threadGoalActionPendingByThreadId.value, threadId)
+    threadGoalErrorByThreadId.value = omitKey(threadGoalErrorByThreadId.value, threadId)
+    queuedMessagesByThreadId.value = omitKey(queuedMessagesByThreadId.value, threadId)
+    saveReadStateMap(readStateByThreadId.value)
+    saveThreadScrollStateMap(scrollStateByThreadId.value)
+  }
+
   async function archiveThreadById(threadId: string) {
     try {
       await archiveThread(threadId)
@@ -3352,6 +3381,20 @@ export function useDesktopState() {
 
       if (selectedThreadId.value === threadId) {
         await loadMessages(selectedThreadId.value)
+      }
+    } catch (unknownError) {
+      error.value = unknownError instanceof Error ? unknownError.message : 'Unknown application error'
+    }
+  }
+
+  async function deleteThreadById(threadId: string) {
+    try {
+      await deleteThread(threadId)
+      clearLocalThreadState(threadId)
+      await loadThreads()
+
+      if (selectedThreadId.value === threadId) {
+        setSelectedThreadId('')
       }
     } catch (unknownError) {
       error.value = unknownError instanceof Error ? unknownError.message : 'Unknown application error'
@@ -4320,6 +4363,7 @@ export function useDesktopState() {
     ensureThreadMessagesLoaded,
     setThreadScrollState,
     archiveThreadById,
+    deleteThreadById,
     renameThreadById,
     forkThreadFromTurn,
     sendMessageToSelectedThread,

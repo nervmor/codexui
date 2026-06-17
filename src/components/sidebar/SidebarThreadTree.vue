@@ -414,7 +414,7 @@
         <div class="rename-thread-panel" role="dialog" aria-modal="true" aria-label="Delete thread">
           <h3 class="rename-thread-title">Delete thread?</h3>
           <p class="rename-thread-subtitle">
-            This will archive the thread "{{ deleteThreadTitle }}". You can find it later in archived threads.
+            This permanently deletes "{{ deleteThreadTitle }}" and any spawned child threads.
           </p>
           <div class="rename-thread-actions">
             <button class="rename-thread-button" type="button" @click="closeDeleteThreadDialog">Cancel</button>
@@ -456,6 +456,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [threadId: string]
   archive: [threadId: string]
+  delete: [threadId: string]
   'start-new-thread': [projectName: string]
   'browse-project-files': [projectName: string]
   'open-project-git-menu': [projectName: string]
@@ -829,7 +830,7 @@ function submitDeleteThread(): void {
   const threadId = deleteThreadDialogThreadId.value
   if (!threadId) return
   pinnedThreadIds.value = pinnedThreadIds.value.filter((id) => id !== threadId)
-  emit('archive', threadId)
+  emit('delete', threadId)
   closeDeleteThreadDialog()
 }
 
