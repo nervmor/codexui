@@ -3636,7 +3636,10 @@ export function useDesktopState() {
           throw unknownError
         }
       }
-      if (!threadId) return ''
+      if (!threadId) {
+        isSendingMessage.value = false
+        return ''
+      }
 
       insertOptimisticThread(threadId, targetCwd, nextText || '[Image]')
       saveModelPreferenceForContext(threadId, selectedModelId.value || selectedModel, selectedEffort)
@@ -3724,7 +3727,10 @@ export function useDesktopState() {
           throw unknownError
         }
       }
-      if (!threadId) return ''
+      if (!threadId) {
+        isSendingMessage.value = false
+        return ''
+      }
 
       insertOptimisticThread(threadId, targetCwd, normalizedObjective)
       saveModelPreferenceForContext(threadId, selectedModelId.value || selectedModel, selectedEffort)
@@ -3743,21 +3749,52 @@ export function useDesktopState() {
       setThreadGoalState(threadId, goal)
       setThreadGoalError(threadId, '')
 
-      pendingThreadsRefresh = true
-      await syncFromNotifications()
+      shouldAutoScrollOnNextAgentEvent = true
+      setTurnSummaryForThread(threadId, null)
+      setTurnActivityForThread(
+        threadId,
+        {
+          label: 'Thinking',
+          details: buildPendingTurnDetails(
+            selectedModelId.value,
+            selectedReasoningEffort.value,
+            selectedCollaborationMode.value,
+          ),
+        },
+      )
+      setTurnErrorForThread(threadId, null)
+      setThreadInProgress(threadId, true)
+      const capturedThreadId = threadId
+      const capturedCwd = targetCwd || null
+      void startTurnForThread(threadId, normalizedObjective)
+        .catch((unknownError) => {
+          shouldAutoScrollOnNextAgentEvent = false
+          setThreadInProgress(threadId, false)
+          setTurnActivityForThread(threadId, null)
+          const errorMessage = unknownError instanceof Error ? unknownError.message : 'Unknown application error'
+          setTurnErrorForThread(threadId, errorMessage)
+          error.value = errorMessage
+        })
+        .finally(() => {
+          isSendingMessage.value = false
+        })
+      void requestThreadTitleGeneration(capturedThreadId, normalizedObjective, capturedCwd)
       return threadId
     } catch (unknownError) {
       const errorMessage = unknownError instanceof Error ? unknownError.message : 'Failed to start goal'
       if (threadId) {
         setThreadGoalError(threadId, errorMessage)
+        setThreadInProgress(threadId, false)
+        setTurnActivityForThread(threadId, null)
       }
+      shouldAutoScrollOnNextAgentEvent = false
       error.value = errorMessage
+      isSendingMessage.value = false
       throw unknownError
     } finally {
       if (threadId) {
         setThreadGoalActionPending(threadId, false)
       }
-      isSendingMessage.value = false
     }
   }
 
